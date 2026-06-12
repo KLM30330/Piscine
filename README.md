@@ -5,23 +5,23 @@ le système se compose d'un Raspberry qui pilote la domotique de la maison via h
 
 Ce qui raccordé sur le Raspberry de la Piscine :
 I2C :	
-	* Atlas scientific :
+	- Atlas scientific :
 		- module PH EZO-pH
 		- module REDOX EZO-ORP
 		- module température EZO™ RTD
 		- pompe doseuse péristaltique EZO-PMP
-	* PCF8574
+	- PCF8574
 		- relai de commande de l'électrolyseur en mode on/off
-	* ecran LCD1602 16x2
+	*- ecran LCD1602 16x2
 
 One wire :
-	* sonde de température DS18B20 pour surveiller la température de la pompe de piscine
+	- sonde de température DS18B20 pour surveiller la température de la pompe de piscine
 
 Gpio :
-	* 4 boutons poussoir en face avant
+	- 4 boutons poussoir en face avant
 
 USB :
-	* Interface USB RS485
+	- Interface USB RS485
 		- variateur Wk600-d alimente la pompe, le variateur est piloté par modbus	
 
 Le Raspberry piscine gère en automatique :
