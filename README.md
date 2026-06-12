@@ -1,10 +1,11 @@
 # Piscine
 Automatisation de la piscine
+
 le système se compose d'un Raspberry qui pilote la domotique de la maison via home assistant et d'un deuxième Raspberry qui pilote la piscine. la pompe de piscine a un débit de 17m3/h et la piscine fait 38m3.
 
 Ce qui raccordé sur le Raspberry de la Piscine :
 I2C :	
-	* Atlas scientificen :
+	* Atlas scientific :
 		- module PH EZO-pH
 		- module REDOX EZO-ORP
 		- module température EZO™ RTD
