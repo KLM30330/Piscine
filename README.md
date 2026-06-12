@@ -45,6 +45,7 @@ Actions manuelles depuis le Raspberry piscine :
 * le 4eme bouton poussoir relance la filtration en mode auto et affiche sur le LCD pendant 30s "reprise filtration"
 
 Informations renvoyées à home assistant :
+
 	- température de l'eau
 	- valeur de ph
 	- valeur redox
@@ -56,6 +57,7 @@ Informations renvoyées à home assistant :
 	- température de la pompe
 
 Commande depuis home assistant:
+
 	- mode auto
 	- mode forcé
 	- mode boost
