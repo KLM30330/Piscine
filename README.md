@@ -5,7 +5,8 @@ le système se compose d'un Raspberry qui pilote la domotique de la maison via h
 la pompe de piscine a un débit de 17m3/h et la piscine fait 38m3.
 
 Ce qui raccordé sur le Raspberry de la Piscine :
-I2C :	
+I2C :
+
 	- Atlas scientific :
 		- module PH EZO-pH
 		- module REDOX EZO-ORP
