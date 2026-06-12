@@ -5,6 +5,7 @@ le système se compose d'un Raspberry qui pilote la domotique de la maison via h
 la pompe de piscine a un débit de 17m3/h et la piscine fait 38m3.
 
 Ce qui raccordé sur le Raspberry de la Piscine :
+
 I2C :
 
 	- Atlas scientific :
@@ -19,12 +20,15 @@ I2C :
 	- 1 ecran : LCD1602 16x2
 
 Onewire :
+
 	- 1 sonde de température DS18B20 pour surveiller la température de la pompe de piscine
 
 Gpio :
+
 	- 4 boutons poussoir en face avant gpio5, gpio6, gpio13, gpio19
 
 USB :
+
 	- Interface USB RS485
 		- variateur Wk600-d alimente la pompe, le variateur est piloté par modbus	
 
