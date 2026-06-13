@@ -34,8 +34,4 @@
     <PackageReference Include="System.IO.Ports" Version="10.*" />
   </ItemGroup>
 
-  <!-- Ajoute des dépendances natives pour linux-arm (si nécessaire) -->
-  <ItemGroup>
-    <NativeReference Include="libgpiod" />
-  </ItemGroup>
 </Project>
