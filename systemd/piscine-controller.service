@@ -1,0 +1,19 @@
+[Unit]
+Description=Piscine Controller (.NET 10 AOT)
+After=network.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/opt/piscine
+ExecStart=/opt/piscine/PiscineController
+Restart=on-failure
+RestartSec=5s
+KillSignal=SIGTERM
+TimeoutStopSec=15s
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=piscine-controller
+
+[Install]
+WantedBy=multi-user.target
