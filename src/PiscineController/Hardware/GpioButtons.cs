@@ -17,7 +17,7 @@ public sealed class GpioButtons : IDisposable
     public GpioButtons(PoolConfig cfg, ILogger<GpioButtons> logger)
     {
         _logger = logger;
-        _gpio = new GpioController(PinNumberingScheme.Logical);
+        _gpio = new GpioController();
 
         Register(cfg.BtnLcdDisplay,   () => LcdDisplayPressed?.Invoke());
         Register(cfg.BtnPrimePump,    () => PrimePumpPressed?.Invoke());
