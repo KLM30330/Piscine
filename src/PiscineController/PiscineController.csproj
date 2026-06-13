@@ -7,18 +7,6 @@
 <!-- Modif klm -->
 
     <PublishAot>true</PublishAot>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-
-    <!-- Désactive la trimming pour éviter les erreurs avec System.Device.Gpio et MQTTnet -->
-    <PublishTrimmed>false</PublishTrimmed>
-
-    <!-- Optimisations pour AOT -->
-    <AotProfile>default</AotProfile>
-    <AotAsmResolver>static</AotAsmResolver>
-
-    <!-- Cible l'architecture ARM pour le Raspberry Pi -->
-    <RuntimeIdentifier>linux-arm</RuntimeIdentifier>
 
   </PropertyGroup>
   <ItemGroup>
