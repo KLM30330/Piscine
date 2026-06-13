@@ -3,35 +3,12 @@
     <OutputType>Exe</OutputType>
     <TargetFramework>net10.0</TargetFramework>
     <InvariantGlobalization>true</InvariantGlobalization>
-    <PublishAot>true</PublishAot> <!-- Active la compilation AOT -->
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-
-    <!-- Désactive la trimming pour éviter les erreurs avec System.Device.Gpio et MQTTnet -->
-    <PublishTrimmed>false</PublishTrimmed>
-
-    <!-- Optimisations pour AOT -->
-    <AotProfile>default</AotProfile>
-    <AotAsmResolver>static</AotAsmResolver>
-
-    <!-- Cible l'architecture ARM pour le Raspberry Pi -->
-    <RuntimeIdentifier>linux-arm</RuntimeIdentifier>
+    <PublishAot>true</PublishAot>
   </PropertyGroup>
-
   <ItemGroup>
-    <!-- Désactive la trimming pour les bibliothèques problématiques -->
-    <TrimmableAssembly Include="System.Device.Gpio" Trimmable="false" />
-    <TrimmableAssembly Include="MQTTnet" Trimmable="false" />
-    <TrimmableAssembly Include="System.IO.Ports" Trimmable="false" />
-    <TrimmableAssembly Include="Microsoft.Extensions.Hosting" Trimmable="false" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <!-- Dépendances NuGet -->
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.*" />
     <PackageReference Include="MQTTnet" Version="5.*" />
     <PackageReference Include="System.Device.Gpio" Version="4.*" />
     <PackageReference Include="System.IO.Ports" Version="10.*" />
   </ItemGroup>
-
 </Project>
