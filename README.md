@@ -69,5 +69,22 @@ Commande depuis home assistant:
 Automations home assistant :
 	- si filtration auto => Notification journalière temps de fonctionnement de la pompe valeur Ph, redox, température + analyse
 	- si redox ou ph trop bas ou trop haut => alarme
-  
 
+## Déploiement
+
+### Publication cross-compile (dev Windows → RPi 3B+)
+```bash
+dotnet publish src/PiscineController/ -c Release -r linux-arm --self-contained \
+  /p:PublishAot=true -o publish/
+```
+
+### Installation sur RPi
+```bash
+sudo mkdir -p /opt/piscine
+sudo cp publish/PiscineController /opt/piscine/
+sudo cp src/PiscineController/appsettings.json /opt/piscine/
+sudo cp systemd/piscine-controller.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now piscine-controller
+sudo journalctl -u piscine-controller -f
+```
