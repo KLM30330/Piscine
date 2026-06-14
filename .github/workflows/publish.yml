@@ -30,7 +30,7 @@ jobs:
       - name: Installer cross-compile toolchain
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y clang gcc-arm-linux-gnueabihf zlib1g-dev
+          sudo apt-get install -y clang lld gcc-arm-linux-gnueabihf zlib1g-dev
       - name: Publish AOT linux-arm
         run: |
           dotnet publish src/PiscineController/ \
