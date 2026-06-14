@@ -9,6 +9,9 @@ using PiscineController.Ph;
 using PiscineController.Services;
 using System.Text.Json;
 
+// Forcer le répertoire courant = dossier du binaire
+Directory.SetCurrentDirectory(AppContext.BaseDirectory);
+
 var host = Host.CreateDefaultBuilder(args)
     .ConfigureLogging(logging =>
     {
