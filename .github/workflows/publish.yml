@@ -30,6 +30,11 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y clang lld gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu zlib1g-dev
+      - name: Injecter secrets dans appsettings.json
+        run: |
+          sed -i 's|"MqttBroker": ".*"|"MqttBroker": "${{ secrets.MQTT_BROKER }}"|g' src/PiscineController/appsettings.json
+          sed -i 's|"MqttUser": ".*"|"MqttUser": "${{ secrets.MQTT_USER }}"|g' src/PiscineController/appsettings.json
+          sed -i 's|"MqttPassword": ".*"|"MqttPassword": "${{ secrets.MQTT_PASSWORD }}"|g' src/PiscineController/appsettings.json
       - name: Publish AOT linux-arm64
         run: |
           dotnet publish src/PiscineController/ \
@@ -42,4 +47,5 @@ jobs:
           files: |
             publish/PiscineController
             publish/libSystem.IO.Ports.Native.so
+            publish/appsettings.json
           generate_release_notes: true
