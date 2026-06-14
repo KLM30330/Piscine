@@ -12,7 +12,7 @@ public sealed class PoolConfig
     public string MqttHaDisc { get; init; } = "homeassistant";
 
     // Hardware I2C
-    public int I2cBus { get; init; } = 1;
+    public int I2cBus { get; set; } = 1;
     public int AtlasPhAddr { get; init; } = 0x63;
     public int AtlasOrpAddr { get; init; } = 0x62;
     public int AtlasRtdAddr { get; init; } = 0x66;
