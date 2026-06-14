@@ -75,17 +75,63 @@ var host = Host.CreateDefaultBuilder(args)
         services.AddSingleton(sp => new FiltrationManager(sp.GetRequiredService<PoolConfig>()));
         services.AddSingleton(sp => new PhPidController(sp.GetRequiredService<PoolConfig>()));
 
-        // Services — ordre inversé = ordre d'arrêt
-        // DisplayService s'arrête en dernier (LCD clear)
-        // MqttService s'arrête en premier (publie "offline" avant libération hardware)
-        services.AddHostedService<DisplayService>();
-        services.AddHostedService<ElectrolyzerService>();
-        services.AddHostedService<PumpTempService>();
-        services.AddHostedService<DriveService>();
-        services.AddHostedService<FiltrationService>();
-        services.AddHostedService<SensorService>();
-        services.AddHostedService<ButtonService>();
-        services.AddHostedService<MqttService>();
+        // DisplayService — singleton pour que ButtonService puisse le résoudre directement
+        services.AddSingleton(sp => new DisplayService(
+            sp.GetRequiredService<Lcd1602>(),
+            sp.GetRequiredService<ILogger<DisplayService>>()));
+        services.AddHostedService(sp => sp.GetRequiredService<DisplayService>());
+
+        // MqttService — singleton pour que DriveService/PumpTempService/SensorService le résolvent
+        services.AddSingleton(sp => new MqttService(
+            sp.GetRequiredService<PoolConfig>(),
+            sp.GetRequiredService<PoolState>(),
+            sp.GetRequiredService<FiltrationManager>(),
+            sp.GetRequiredService<PhPidController>(),
+            sp.GetRequiredService<ILogger<MqttService>>()));
+        services.AddHostedService(sp => sp.GetRequiredService<MqttService>());
+
+        // Autres hosted services — factory lambdas (AOT-safe, pas de reflection)
+        services.AddHostedService(sp => new ElectrolyzerService(
+            sp.GetRequiredService<PoolState>(),
+            sp.GetRequiredService<Pcf8574>(),
+            sp.GetRequiredService<ILogger<ElectrolyzerService>>()));
+        services.AddHostedService(sp => new PumpTempService(
+            sp.GetRequiredService<PoolConfig>(),
+            sp.GetRequiredService<PoolState>(),
+            sp.GetRequiredService<Ds18b20>(),
+            sp.GetRequiredService<MqttService>(),
+            sp.GetRequiredService<ILogger<PumpTempService>>()));
+        services.AddHostedService(sp => new DriveService(
+            sp.GetRequiredService<PoolConfig>(),
+            sp.GetRequiredService<PoolState>(),
+            sp.GetRequiredService<Wk600Drive>(),
+            sp.GetRequiredService<MqttService>(),
+            sp.GetRequiredService<ILogger<DriveService>>()));
+        services.AddHostedService(sp => new FiltrationService(
+            sp.GetRequiredService<PoolConfig>(),
+            sp.GetRequiredService<PoolState>(),
+            sp.GetRequiredService<FiltrationManager>(),
+            sp.GetRequiredService<Wk600Drive>(),
+            sp.GetRequiredService<ILogger<FiltrationService>>()));
+        services.AddHostedService(sp => new SensorService(
+            sp.GetRequiredService<PoolConfig>(),
+            sp.GetRequiredService<PoolState>(),
+            sp.GetRequiredService<EzoPh>(),
+            sp.GetRequiredService<EzoOrp>(),
+            sp.GetRequiredService<EzoRtd>(),
+            sp.GetRequiredService<EzoPmp>(),
+            sp.GetRequiredService<FiltrationManager>(),
+            sp.GetRequiredService<PhPidController>(),
+            sp.GetRequiredService<MqttService>(),
+            sp.GetRequiredService<ILogger<SensorService>>()));
+        services.AddHostedService(sp => new ButtonService(
+            sp.GetRequiredService<PoolConfig>(),
+            sp.GetRequiredService<PoolState>(),
+            sp.GetRequiredService<GpioButtons>(),
+            sp.GetRequiredService<FiltrationManager>(),
+            sp.GetRequiredService<EzoPmp>(),
+            sp.GetRequiredService<DisplayService>(),
+            sp.GetRequiredService<ILogger<ButtonService>>()));
     })
     .Build();
 
