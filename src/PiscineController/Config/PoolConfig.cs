@@ -21,7 +21,7 @@ public sealed class PoolConfig
     public int LcdI2cAddr { get; init; } = 0x27;
 
     // 1-Wire DS18B20
-    public string? OnewirePumpSensorId { get; init; } = "a1-00a029cc9225";
+    public string? OnewirePumpSensorId { get; set; } = "a1-00a029cc9225";
     public double PumpTempAlertC { get; init; } = 60.0;
     public double PumpTempCriticalC { get; init; } = 70.0;
 
@@ -32,7 +32,7 @@ public sealed class PoolConfig
     public int BtnResumeFilter { get; init; } = 19;
 
     // Modbus WK600-D
-    public string ModbusPort { get; init; } = "/dev/ttyUSB0";
+    public string ModbusPort { get; set; } = "/dev/ttyUSB0";
     public int ModbusSlaveId { get; init; } = 1;
     public int ModbusBaudrate { get; init; } = 9600;
     public string ModbusParity { get; init; } = "N";
