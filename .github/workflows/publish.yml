@@ -22,6 +22,8 @@ jobs:
   publish-arm:
     needs: validate-version
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
