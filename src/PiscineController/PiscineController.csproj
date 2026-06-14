@@ -7,7 +7,8 @@
     <!-- lld supports all target arches; system ld.bfd on ubuntu-latest is x86-only -->
     <LinkerFlavor>lld</LinkerFlavor>
     <!-- system objcopy is x86-only; use ARM cross-tool when cross-compiling for linux-arm -->
-    <ObjCopyName Condition="'$(RuntimeIdentifier)' == 'linux-arm'">arm-linux-gnueabihf-objcopy</ObjCopyName>
+    <!-- <ObjCopyName Condition="'$(RuntimeIdentifier)' == 'linux-arm'">arm-linux-gnueabihf-objcopy</ObjCopyName> -->
+    <ObjCopyName Condition="'$(RuntimeIdentifier)' == 'linux-arm64'">aarch64-linux-gnu-objcopy</ObjCopyName>
     <!-- System.Device.Gpio 4.x still targets net8.0 without AOT annotations → IL2104 -->
     <IlcTreatWarningsAsErrors>false</IlcTreatWarningsAsErrors>
   </PropertyGroup>
