@@ -1,10 +1,8 @@
 name: Publish
-
 on:
   push:
     tags:
       - '[0-9]+.[0-9]+.[0-9]+.[0-9]+'
-
 jobs:
   validate-version:
     runs-on: ubuntu-latest
@@ -18,8 +16,7 @@ jobs:
             echo "Tag $TAG != Version $VERSION dans Directory.Build.props"
             exit 1
           fi
-
-  publish-arm:
+  publish-arm64:
     needs: validate-version
     runs-on: ubuntu-latest
     permissions:
@@ -29,18 +26,20 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
-      - name: Installer cross-compile toolchain
+      - name: Installer cross-compile toolchain arm64
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y clang lld gcc-arm-linux-gnueabihf binutils-arm-linux-gnueabihf zlib1g-dev
-      - name: Publish AOT linux-arm
+          sudo apt-get install -y clang lld gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu zlib1g-dev
+      - name: Publish AOT linux-arm64
         run: |
           dotnet publish src/PiscineController/ \
-            -c Release -r linux-arm --self-contained \
+            -c Release -r linux-arm64 --self-contained \
             /p:PublishAot=true \
             -o publish/
       - name: Créer GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: publish/PiscineController
+          files: |
+            publish/PiscineController
+            publish/libSystem.IO.Ports.Native.so
           generate_release_notes: true
