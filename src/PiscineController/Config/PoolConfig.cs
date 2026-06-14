@@ -3,7 +3,7 @@ namespace PiscineController.Config;
 public sealed class PoolConfig
 {
     // MQTT
-    public string MqttBroker { get; init; } = "192.168.1.XX";
+    public string MqttBroker { get; init; } = "192.168.1.100";
     public int MqttPort { get; init; } = 1883;
     public string MqttUser { get; init; } = "pool_user";
     public string MqttPassword { get; init; } = "";
