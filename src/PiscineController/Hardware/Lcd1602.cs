@@ -14,6 +14,10 @@ public sealed class Lcd1602 : IDisposable
     public Lcd1602(int busId, int address)
     {
         _device = I2cDevice.Create(new I2cConnectionSettings(busId, address));
+    }
+
+    public void Initialize()
+    {
         Thread.Sleep(50);
         Init();
     }

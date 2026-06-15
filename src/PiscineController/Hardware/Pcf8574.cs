@@ -11,7 +11,6 @@ public sealed class Pcf8574 : IDisposable
     {
         _device = I2cDevice.Create(new I2cConnectionSettings(busId, address));
         _state = 0x00;
-        Write();
     }
 
     public void SetPin(int pin, bool value)

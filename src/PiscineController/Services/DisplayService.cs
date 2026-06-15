@@ -25,6 +25,7 @@ public sealed class DisplayService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken ct)
     {
+        _lcd.Initialize();
         await foreach (var cmd in _channel.Reader.ReadAllAsync(ct))
         {
             try
