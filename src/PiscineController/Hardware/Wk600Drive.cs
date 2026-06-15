@@ -165,17 +165,17 @@ public DriveStatusSnapshot ReadStatus()
     // Bloc 1 : mesures continues 0x7000–0x7005 (U0-00 à U0-05)
     var measures = ReadHoldingRegisters(0x7000, 6);
     // Bloc 2 : température moteur 0x7022 (U0-34)
-    var tempRegs = ReadHoldingRegisters(0x7022, 1);
+    // var tempRegs = ReadHoldingRegisters(0x7022, 1);
     // Bloc 3 : état variateur 0x703D + code défaut 0x703E (U0-61, U0-62)
-    var statusRegs = ReadHoldingRegisters(0x703D, 2);
+   // var statusRegs = ReadHoldingRegisters(0x703D, 2);
 
     if (measures == null || measures.Length < 6)
         return new DriveStatusSnapshot { SetpointHz = _currentFreq };
 
     // U0-61 : bits d'état du variateur
     // bit 0 = Running, bit 2 = Fault (à confirmer selon manuel)
-    ushort sw       = statusRegs != null && statusRegs.Length >= 1 ? statusRegs[0] : (ushort)0;
-    int faultCode   = statusRegs != null && statusRegs.Length >= 2 ? statusRegs[1] : 0;
+   // ushort sw       = statusRegs != null && statusRegs.Length >= 1 ? statusRegs[0] : (ushort)0;
+    // int faultCode   = statusRegs != null && statusRegs.Length >= 2 ? statusRegs[1] : 0;
     bool isRunning  = (sw & (1 << 0)) != 0; // bit 0 : en marche
     bool isFault    = (sw & (1 << 3)) != 0; // bit 3 : défaut actif
     bool atSetpoint = (sw & (1 << 7)) != 0; // bit 7 : à la consigne
@@ -189,7 +189,7 @@ public DriveStatusSnapshot ReadStatus()
         OutVoltageV = measures[3],                    // U0-03 : 1 V
         OutCurrentA = measures[4] / 100.0,           // U0-04 : 0.01 A
         OutPowerKw  = measures[5] / 10.0,            // U0-05 : 0.1 kW
-        DriveTempC  = tempRegs != null && tempRegs.Length >= 1 ? tempRegs[0] : 0, // U0-34 : 1°C
+        // DriveTempC  = tempRegs != null && tempRegs.Length >= 1 ? tempRegs[0] : 0, // U0-34 : 1°C
         FaultCode   = faultCode,                     // U0-62
         FaultLabel  = FaultLabels.TryGetValue(faultCode, out var lbl) ? lbl : $"Code {faultCode}",
         IsRunning   = isRunning,
