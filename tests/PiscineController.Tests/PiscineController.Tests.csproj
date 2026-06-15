@@ -5,10 +5,10 @@
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="xunit" Version="2.*" />
-    <PackageReference Include="xunit.runner.visualstudio" Version="2.*">
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.*">
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
-    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.*" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.*" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\PiscineController\PiscineController.csproj" />
