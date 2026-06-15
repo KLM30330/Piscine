@@ -37,6 +37,8 @@ public sealed class GpioButtons : IDisposable
             {
                 long now = DateTime.UtcNow.Ticks;
                 if (now - _lastTrigger[args.PinNumber] < DebounceTicks) return;
+                Thread.Sleep(10);
+                if (_gpio.Read(args.PinNumber) != PinValue.Low) return;
                 _lastTrigger[args.PinNumber] = now;
                 _logger.LogDebug("Bouton GPIO {Pin} appuyé", args.PinNumber);
                 handler();
