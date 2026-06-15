@@ -199,26 +199,32 @@ public sealed class Wk600Drive : IDisposable
     public void FaultReset() => WriteRegister(0x2000, 0x0007);
 
     // ── Lecture mesures U0-00 à U0-05 (bloc 0x7000, 6 registres) ─────────────
-    public DriveStatusSnapshot ReadStatus()
+public DriveStatusSnapshot ReadStatus()
+{
+    var m = ReadHoldingRegisters(0x7000, 6);
+    if (m == null)
     {
-        var m = ReadHoldingRegisters(0x7000, 6);
-        if (m == null)
-        {
-            _logger.LogWarning("WK600-D ReadStatus : pas de réponse");
-            return new DriveStatusSnapshot { SetpointHz = _currentFreq };
-        }
-
-        return new DriveStatusSnapshot
-        {
-            OutFreqHz   = m[0] / 100.0,  // U0-00 : fréquence sortie  (0.01 Hz)
-            // m[1] = U0-01 : fréquence consigne — non exposé
-            DcBusV      = m[2] / 10.0,   // U0-02 : tension bus DC    (0.1 V)
-            OutVoltageV = m[3],           // U0-03 : tension sortie    (1 V)
-            OutCurrentA = m[4] / 100.0,  // U0-04 : courant sortie    (0.01 A)
-            OutPowerKw  = m[5] / 10.0,   // U0-05 : puissance sortie  (0.1 kW)
-            SetpointHz  = _currentFreq,
-        };
+        _logger.LogWarning("WK600-D ReadStatus : pas de réponse");
+        return new DriveStatusSnapshot { SetpointHz = _currentFreq, IsRunning = _running };
     }
+
+    return new DriveStatusSnapshot
+    {
+        OutFreqHz   = m[0] / 100.0,
+        DcBusV      = m[2] / 10.0,
+        OutVoltageV = m[3],
+        OutCurrentA = m[4] / 100.0,
+        OutPowerKw  = m[5] / 10.0,
+        SetpointHz  = _currentFreq,
+        IsRunning   = _running,   // état connu en mémoire
+        IsFault     = false,      // non lu — DriveService doit gérer les timeouts comme défaut
+        AtSetpoint  = false,
+        FaultCode   = 0,
+        FaultLabel  = "Aucun",
+        DriveTempC  = 0,
+        RunTimeH    = 0,
+    };
+}
 
     public void Dispose()
     {
@@ -234,4 +240,14 @@ public sealed class DriveStatusSnapshot
     public double DcBusV      { get; init; }
     public double OutPowerKw  { get; init; }
     public double SetpointHz  { get; init; }
+
+    // Propriétés conservées pour compatibilité avec DriveService
+    // (non lues depuis le variateur — valeurs par défaut)
+    public bool   IsRunning   { get; init; }
+    public bool   IsFault     { get; init; }
+    public bool   AtSetpoint  { get; init; }
+    public int    FaultCode   { get; init; }
+    public string FaultLabel  { get; init; } = "Aucun";
+    public double DriveTempC  { get; init; }
+    public int    RunTimeH    { get; init; }
 }
