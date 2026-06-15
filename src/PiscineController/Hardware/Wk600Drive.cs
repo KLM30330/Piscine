@@ -99,69 +99,69 @@ public sealed class Wk600Drive : IDisposable
         }
     }
 
-    private void SetFreqRaw(double hz)
+private void SetFreqRaw(double hz)
+{
+    double clamped = Math.Clamp(hz, _cfg.FreqMinAbsolute, _cfg.FreqNominal);
+    WriteRegister(0x1000, (ushort)(clamped * 100)); // consigne fréquence
+    _currentFreq = clamped;
+}
+
+public async Task RampStartAsync(double targetHz, CancellationToken ct)
+{
+    if (_running) return;
+    double target = Math.Max(Math.Clamp(targetHz, _cfg.FreqMinAbsolute, _cfg.FreqNominal), _cfg.FreqStartMin);
+    SetFreqRaw(_cfg.FreqStartMin);
+    WriteRegister(0x2000, 0x0001); // RUN avant
+    _running = true;
+    _currentFreq = _cfg.FreqStartMin;
+    double freq = _cfg.FreqStartMin;
+    while (freq < target && !ct.IsCancellationRequested)
     {
-        double clamped = Math.Clamp(hz, _cfg.FreqMinAbsolute, _cfg.FreqNominal);
-        WriteRegister(0x1000, (ushort)(clamped * 100));
-        _currentFreq = clamped;
+        freq = Math.Min(freq + _cfg.FreqRampStep, target);
+        SetFreqRaw(freq);
+        await Task.Delay((int)(_cfg.FreqRampDelay * 1000), ct).ConfigureAwait(false);
     }
+    _logger.LogInformation("WK600-D démarré @ {Freq} Hz", _currentFreq);
+}
 
-    public async Task RampStartAsync(double targetHz, CancellationToken ct)
+public async Task RampToAsync(double targetHz, CancellationToken ct)
+{
+    if (!_running) return;
+    double target = Math.Clamp(targetHz, _cfg.FreqMinAbsolute, _cfg.FreqNominal);
+    if (Math.Abs(target - _currentFreq) < 0.5) return;
+    double freq = _currentFreq;
+    double dir = target > freq ? 1 : -1;
+    while (dir > 0 ? freq < target : freq > target)
     {
-        if (_running) return;
-        double target = Math.Max(Math.Clamp(targetHz, _cfg.FreqMinAbsolute, _cfg.FreqNominal), _cfg.FreqStartMin);
-        SetFreqRaw(_cfg.FreqStartMin);
-        WriteRegister(0x2000, 0x0001);
-        _running = true;
-        _currentFreq = _cfg.FreqStartMin;
-        double freq = _cfg.FreqStartMin;
-        while (freq < target && !ct.IsCancellationRequested)
-        {
-            freq = Math.Min(freq + _cfg.FreqRampStep, target);
-            SetFreqRaw(freq);
-            await Task.Delay((int)(_cfg.FreqRampDelay * 1000), ct).ConfigureAwait(false);
-        }
-        _logger.LogInformation("WK600-D démarré @ {Freq} Hz", _currentFreq);
+        freq = Math.Clamp(freq + dir * _cfg.FreqRampStep, _cfg.FreqMinAbsolute, _cfg.FreqNominal);
+        if (dir > 0 && freq > target) freq = target;
+        if (dir < 0 && freq < target) freq = target;
+        SetFreqRaw(freq);
+        await Task.Delay((int)(_cfg.FreqRampDelay * 1000), ct).ConfigureAwait(false);
     }
+    _logger.LogInformation("WK600-D fréquence → {Freq} Hz", _currentFreq);
+}
 
-    public async Task RampToAsync(double targetHz, CancellationToken ct)
+public async Task RampStopAsync(CancellationToken ct)
+{
+    if (!_running) return;
+    double freq = _currentFreq;
+    while (freq > _cfg.FreqStartMin && !ct.IsCancellationRequested)
     {
-        if (!_running) return;
-        double target = Math.Clamp(targetHz, _cfg.FreqMinAbsolute, _cfg.FreqNominal);
-        if (Math.Abs(target - _currentFreq) < 0.5) return;
-        double freq = _currentFreq;
-        double dir = target > freq ? 1 : -1;
-        while (dir > 0 ? freq < target : freq > target)
-        {
-            freq = Math.Clamp(freq + dir * _cfg.FreqRampStep, _cfg.FreqMinAbsolute, _cfg.FreqNominal);
-            if (dir > 0 && freq > target) freq = target;
-            if (dir < 0 && freq < target) freq = target;
-            SetFreqRaw(freq);
-            await Task.Delay((int)(_cfg.FreqRampDelay * 1000), ct).ConfigureAwait(false);
-        }
-        _logger.LogInformation("WK600-D fréquence → {Freq} Hz", _currentFreq);
+        freq = Math.Max(freq - _cfg.FreqRampStep, _cfg.FreqStartMin);
+        SetFreqRaw(freq);
+        await Task.Delay((int)(_cfg.FreqRampDelay * 1000), ct).ConfigureAwait(false);
     }
+    WriteRegister(0x2000, 0x0006); // STOP
+    _running = false;
+    _currentFreq = 0;
+    _logger.LogInformation("WK600-D arrêté");
+}
 
-    public async Task RampStopAsync(CancellationToken ct)
-    {
-        if (!_running) return;
-        double freq = _currentFreq;
-        while (freq > _cfg.FreqStartMin && !ct.IsCancellationRequested)
-        {
-            freq = Math.Max(freq - _cfg.FreqRampStep, _cfg.FreqStartMin);
-            SetFreqRaw(freq);
-            await Task.Delay((int)(_cfg.FreqRampDelay * 1000), ct).ConfigureAwait(false);
-        }
-        WriteRegister(0x2000, 0x0006);
-        _running = false;
-        _currentFreq = 0;
-        _logger.LogInformation("WK600-D arrêté");
-    }
+public void FaultReset() => WriteRegister(0x2000, 0x0007); // Reset défaut
 
-    public void FaultReset() => WriteRegister(0x2000, 0x0007);
-
-    public DriveStatusSnapshot ReadStatus()
-    {
+public DriveStatusSnapshot ReadStatus()
+{
     // Bloc 1 : mesures continues 0x7000–0x7005 (U0-00 à U0-05)
     var measures = ReadHoldingRegisters(0x7000, 6);
     // Bloc 2 : température moteur 0x7022 (U0-34)
@@ -182,7 +182,7 @@ public sealed class Wk600Drive : IDisposable
     _running = isRunning;
 
     return new DriveStatusSnapshot
-        {
+    {
         OutFreqHz   = measures[0] / 100.0,           // U0-00 : 0.01 Hz
         // measures[1] = U0-01 fréquence consigne (non mappé dans le snapshot)
         DcBusV      = measures[2] / 10.0,            // U0-02 : 0.1 V
@@ -197,8 +197,8 @@ public sealed class Wk600Drive : IDisposable
         AtSetpoint  = atSetpoint,
         SetpointHz  = _currentFreq,
         // RunTimeH et MotorRpm non disponibles directement — voir U0-26 (0x701A) et U0-14 (0x700E)
-        };
-    }
+    };
+}
 
     public void Dispose()
     {
