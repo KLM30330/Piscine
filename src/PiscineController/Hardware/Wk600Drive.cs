@@ -162,41 +162,18 @@ public void FaultReset() => WriteRegister(0x2000, 0x0007); // Reset défaut
 
 public DriveStatusSnapshot ReadStatus()
 {
-    // Bloc 1 : mesures continues 0x7000–0x7005 (U0-00 à U0-05)
-    var measures = ReadHoldingRegisters(0x7000, 6);
-    // Bloc 2 : température moteur 0x7022 (U0-34)
-    // var tempRegs = ReadHoldingRegisters(0x7022, 1);
-    // Bloc 3 : état variateur 0x703D + code défaut 0x703E (U0-61, U0-62)
-   // var statusRegs = ReadHoldingRegisters(0x703D, 2);
-
-    if (measures == null || measures.Length < 6)
+    var m = ReadHoldingRegisters(0x7000, 6);
+    if (m == null)
         return new DriveStatusSnapshot { SetpointHz = _currentFreq };
-
-    // U0-61 : bits d'état du variateur
-    // bit 0 = Running, bit 2 = Fault (à confirmer selon manuel)
-   // ushort sw       = statusRegs != null && statusRegs.Length >= 1 ? statusRegs[0] : (ushort)0;
-    // int faultCode   = statusRegs != null && statusRegs.Length >= 2 ? statusRegs[1] : 0;
-    bool isRunning  = (sw & (1 << 0)) != 0; // bit 0 : en marche
-    bool isFault    = (sw & (1 << 3)) != 0; // bit 3 : défaut actif
-    bool atSetpoint = (sw & (1 << 7)) != 0; // bit 7 : à la consigne
-    _running = isRunning;
 
     return new DriveStatusSnapshot
     {
-        OutFreqHz   = measures[0] / 100.0,           // U0-00 : 0.01 Hz
-        // measures[1] = U0-01 fréquence consigne (non mappé dans le snapshot)
-        DcBusV      = measures[2] / 10.0,            // U0-02 : 0.1 V
-        OutVoltageV = measures[3],                    // U0-03 : 1 V
-        OutCurrentA = measures[4] / 100.0,           // U0-04 : 0.01 A
-        OutPowerKw  = measures[5] / 10.0,            // U0-05 : 0.1 kW
-        // DriveTempC  = tempRegs != null && tempRegs.Length >= 1 ? tempRegs[0] : 0, // U0-34 : 1°C
-        FaultCode   = faultCode,                     // U0-62
-        FaultLabel  = FaultLabels.TryGetValue(faultCode, out var lbl) ? lbl : $"Code {faultCode}",
-        IsRunning   = isRunning,
-        IsFault     = isFault,
-        AtSetpoint  = atSetpoint,
+        OutFreqHz   = m[0] / 100.0,
+        DcBusV      = m[2] / 10.0,
+        OutVoltageV = m[3],
+        OutCurrentA = m[4] / 100.0,
+        OutPowerKw  = m[5] / 10.0,
         SetpointHz  = _currentFreq,
-        // RunTimeH et MotorRpm non disponibles directement — voir U0-26 (0x701A) et U0-14 (0x700E)
     };
 }
 
@@ -208,20 +185,10 @@ public DriveStatusSnapshot ReadStatus()
 
 public sealed class DriveStatusSnapshot
 {
-    public double OutFreqHz { get; init; }
+    public double OutFreqHz   { get; init; }
     public double OutCurrentA { get; init; }
     public double OutVoltageV { get; init; }
-    public double DcBusV { get; init; }
-    public double OutPowerKw { get; init; }
-    public double DriveTempC { get; init; }
-    public int RunTimeH { get; init; }
-    public int FaultCode { get; init; }
-    public string FaultLabel { get; init; } = "Aucun";
-    public int MotorRpm { get; init; }
-    public double InFreqHz { get; init; }
-    public double InVoltageV { get; init; }
-    public bool IsRunning { get; init; }
-    public bool IsFault { get; init; }
-    public bool AtSetpoint { get; init; }
-    public double SetpointHz { get; init; }
+    public double DcBusV      { get; init; }
+    public double OutPowerKw  { get; init; }
+    public double SetpointHz  { get; init; }
 }
