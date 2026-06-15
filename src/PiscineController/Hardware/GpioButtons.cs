@@ -8,6 +8,8 @@ public sealed class GpioButtons : IDisposable
 {
     private readonly GpioController _gpio;
     private readonly ILogger<GpioButtons> _logger;
+    private readonly Dictionary<int, long> _lastTrigger = new();
+    private const long DebounceTicks = 200 * TimeSpan.TicksPerMillisecond;
 
     public event Action? LcdDisplayPressed;
     public event Action? PrimePumpPressed;
@@ -27,11 +29,15 @@ public sealed class GpioButtons : IDisposable
 
     private void Register(int pin, Action handler)
     {
+        _lastTrigger[pin] = 0;
         _gpio.OpenPin(pin, PinMode.InputPullUp);
         _gpio.RegisterCallbackForPinValueChangedEvent(
             pin, PinEventTypes.Falling,
             (_, args) =>
             {
+                long now = DateTime.UtcNow.Ticks;
+                if (now - _lastTrigger[args.PinNumber] < DebounceTicks) return;
+                _lastTrigger[args.PinNumber] = now;
                 _logger.LogDebug("Bouton GPIO {Pin} appuyé", args.PinNumber);
                 handler();
             });
