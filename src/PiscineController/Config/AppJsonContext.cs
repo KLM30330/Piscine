@@ -21,9 +21,17 @@ public sealed record DriveStatusPayload(
     bool AtSetpoint, double SetpointHz);
 
 public sealed record HaDeviceInfo(
-    string[] Identifiers, string Name, string Model, string Manufacturer);
+    [property: JsonPropertyName("identifiers")] string[] Identifiers,
+    [property: JsonPropertyName("name")] string Name,
+    [property: JsonPropertyName("model")] string Model,
+    [property: JsonPropertyName("manufacturer")] string Manufacturer);
 
 public sealed record HaDiscoveryPayload(
-    string Name, string UniqueId, string StateTopic,
-    string? CommandTopic, string? ValueTemplate, string? UnitOfMeasurement,
-    string? DeviceClass, HaDeviceInfo Device);
+    [property: JsonPropertyName("name")] string Name,
+    [property: JsonPropertyName("unique_id")] string UniqueId,
+    [property: JsonPropertyName("state_topic")] string StateTopic,
+    [property: JsonPropertyName("command_topic")] string? CommandTopic,
+    [property: JsonPropertyName("value_template")] string? ValueTemplate,
+    [property: JsonPropertyName("unit_of_measurement")] string? UnitOfMeasurement,
+    [property: JsonPropertyName("device_class")] string? DeviceClass,
+    [property: JsonPropertyName("device")] HaDeviceInfo Device);
