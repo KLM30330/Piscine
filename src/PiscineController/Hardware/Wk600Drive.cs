@@ -29,11 +29,11 @@ public sealed class Wk600Drive : IDisposable
         _cfg = cfg;
         _logger = logger;
         _slaveId = (byte)cfg.ModbusSlaveId;
-        _port = new SerialPort(cfg.ModbusPort, cfg.ModbusBaudrate, Parity.None, 8, StopBits.Two)
+        _port = new SerialPort(cfg.ModbusPort, cfg.ModbusBaudrate, Parity.None, 8, StopBits.One)
         {
             ReadTimeout  = 1000,
             WriteTimeout = 1000,
-            RtsEnable    = true,
+            RtsEnable    = false
         };
         _port.Open();
         _logger.LogInformation("WK600-D ouvert sur {Port}", cfg.ModbusPort);
@@ -81,7 +81,7 @@ public sealed class Wk600Drive : IDisposable
             ushort gotCrc  = (ushort)(resp[6] | (resp[7] << 8));
             if (respCrc != gotCrc)
             {
-                _logger.LogWarning("WK600-D WriteRegister CRC invalide addr=0x{Addr:X4}", addr);
+                _logger.LogWarning("WK600-D Write CRC invalide addr=0x{Addr:X4}", addr);
                 return false;
             }
 
@@ -90,7 +90,7 @@ public sealed class Wk600Drive : IDisposable
     }
 
     // ── FC03 : lecture de registres ──────────────────────────────────────────
-    private ushort[]? ReadHoldingRegisters(ushort addr, ushort count)
+    private ushort[]? ReadHoldings(ushort addr, ushort count)
     {
         lock (_lock)
         {
@@ -119,7 +119,7 @@ public sealed class Wk600Drive : IDisposable
             ushort gotCrc  = (ushort)(resp[expected - 2] | (resp[expected - 1] << 8));
             if (respCrc != gotCrc)
             {
-                _logger.LogWarning("WK600-D ReadHoldingRegisters CRC invalide addr=0x{Addr:X4}", addr);
+                _logger.LogWarning("WK600-D ReadHoldings CRC invalide addr=0x{Addr:X4}", addr);
                 return null;
             }
 
@@ -134,7 +134,8 @@ public sealed class Wk600Drive : IDisposable
     private void SetFreqRaw(double hz)
     {
         double clamped = Math.Clamp(hz, _cfg.FreqMinAbsolute, _cfg.FreqNominal);
-        WriteRegister(0x1000, (ushort)(clamped * 100)); // 0.01 Hz
+        WriteRegister(0x1000,
+        (ushort)((clamped / 50.0) * 10000));
         _currentFreq = clamped;
     }
 
@@ -226,7 +227,7 @@ public sealed class Wk600Drive : IDisposable
         }
 
         // Lecture état + défaut (2 registres contigus 0x703D–0x703E)
-        var s = ReadHoldingRegisters(0x703D, 2);
+        var s = ReadHoldingRegisters(0x7008, 2);
         ushort sw     = s != null && s.Length >= 1 ? s[0] : (ushort)0;
         int faultCode = s != null && s.Length >= 2 ? s[1] : 0;
 
@@ -240,10 +241,12 @@ public sealed class Wk600Drive : IDisposable
         {
             OutFreqHz   = m[0] / 100.0,  // U0-00 : fréquence sortie  (0.01 Hz)
             // m[1] = U0-01 : fréquence consigne — non exposé
-            DcBusV      = m[2] / 10.0,   // U0-02 : tension bus DC    (0.1 V)
-            OutVoltageV = m[3],           // U0-03 : tension sortie    (1 V)
-            OutCurrentA = m[4] / 100.0,  // U0-04 : courant sortie    (0.01 A)
-            OutPowerKw  = m[5] / 10.0,   // U0-05 : puissance sortie  (0.1 kW)
+            OutFreqHz   = m[0] * 0.01,
+            OutCurrentA = m[1] * 0.1,
+            OutVoltageV = m[2],
+            DcBusV      = m[3],
+            OutPowerKw  = m[5] * 0.1,
+            DriveTempC  = m.Length > 7 ? m[7] : 0,
             IsRunning   = isRunning,
             IsFault     = isFault,
             AtSetpoint  = atSetpoint,
