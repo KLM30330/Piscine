@@ -3,7 +3,6 @@ using PiscineController.Config;
 
 namespace PiscineController.Config;
 
-[JsonSerializable(typeof(PoolConfig))]
 [JsonSerializable(typeof(SensorPayload))]
 [JsonSerializable(typeof(DriveStatusPayload))]
 [JsonSerializable(typeof(HaDiscoveryPayload))]

@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -7,7 +8,6 @@ using PiscineController.Filtration;
 using PiscineController.Hardware;
 using PiscineController.Ph;
 using PiscineController.Services;
-using System.Text.Json;
 
 // Forcer le répertoire courant = dossier du binaire
 Directory.SetCurrentDirectory(AppContext.BaseDirectory);
@@ -21,14 +21,8 @@ var host = Host.CreateDefaultBuilder(args)
     })
     .ConfigureServices((ctx, services) =>
     {
-        // Lire appsettings.json manuellement — pas de reflection binder (AOT)
-        var cfgJson = File.Exists("appsettings.json")
-            ? File.ReadAllText("appsettings.json")
-            : "{}";
-        using var doc = JsonDocument.Parse(cfgJson);
-        var poolSection = doc.RootElement.TryGetProperty("Pool", out var p)
-            ? p.GetRawText() : "{}";
-        var poolConfig = JsonSerializer.Deserialize(poolSection, AppJsonContext.Default.PoolConfig) ?? new PoolConfig();
+        var poolConfig = new PoolConfig();
+        ctx.Configuration.GetSection("Pool").Bind(poolConfig);
 
         services.AddSingleton(poolConfig);
         services.AddSingleton(_ => new PoolState());
