@@ -57,6 +57,7 @@ public sealed class Wk600Drive : IDisposable
     {
         lock (_lock)
         {
+            _port.DiscardInBuffer();
             Span<byte> req = stackalloc byte[8];
             req[0] = _slaveId; req[1] = 0x06;
             req[2] = (byte)(addr >> 8); req[3] = (byte)(addr & 0xFF);
@@ -76,6 +77,7 @@ public sealed class Wk600Drive : IDisposable
     {
         lock (_lock)
         {
+            _port.DiscardInBuffer();
             Span<byte> req = stackalloc byte[8];
             req[0] = _slaveId; req[1] = 0x03;
             req[2] = (byte)(addr >> 8); req[3] = (byte)(addr & 0xFF);

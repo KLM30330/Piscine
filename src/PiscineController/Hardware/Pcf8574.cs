@@ -22,7 +22,15 @@ public sealed class Pcf8574 : IDisposable
 
     public bool GetPin(int pin) => (_state & (1 << pin)) != 0;
 
-    private void Write() => _device.WriteByte(_state);
+    private void Write()
+    {
+        // Retry on EREMOTEIO: shared I2C bus contention with concurrent Atlas EZO operations
+        for (int attempt = 0; attempt < 3; attempt++)
+        {
+            try { _device.WriteByte(_state); return; }
+            catch (IOException) when (attempt < 2) { Thread.Sleep(50); }
+        }
+    }
 
     public void Dispose() => _device.Dispose();
 }

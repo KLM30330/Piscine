@@ -74,9 +74,6 @@ public sealed class EzoOrp : AtlasEzoBase
         return raw != null && double.TryParse(raw, System.Globalization.NumberStyles.Float,
             System.Globalization.CultureInfo.InvariantCulture, out double v) ? v : null;
     }
-
-    public void SetTemperatureCompensation(double tempC) =>
-        SendCommand($"T,{tempC.ToString(System.Globalization.CultureInfo.InvariantCulture)}", 300);
 }
 
 public sealed class EzoRtd : AtlasEzoBase

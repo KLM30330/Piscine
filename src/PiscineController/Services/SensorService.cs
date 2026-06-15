@@ -51,7 +51,6 @@ public sealed class SensorService : BackgroundService
         {
             _state.WaterTempC = tempC.Value;
             _ph.SetTemperatureCompensation(tempC.Value);
-            _orp.SetTemperatureCompensation(tempC.Value);
         }
 
         double? phVal = _ph.Read();
