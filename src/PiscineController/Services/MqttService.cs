@@ -129,10 +129,15 @@ public sealed class MqttService : BackgroundService
             [$"{_cfg.MqttPrefix}_controller"],
             "Piscine", "RPi3B+ / Atlas Scientific / WK600-D", "DIY");
 
-        async Task Sensor(string id, string name, string stateKey, string unit, string? devClass)
+        // ── Capteur numérique (sensor) ────────────────────────────────────────
+        // stateTopic : sous-topic après {prefix}/ d'où HA lira le JSON
+        // Défaut "sensors" pour pH/ORP/temp, "drive" pour les données variateur
+        async Task Sensor(string id, string name, string stateKey,
+                          string unit, string? devClass,
+                          string stateTopic = "sensors")
         {
             var p = new HaDiscoveryPayload(
-                name, $"{dev}_{id}", $"{dev}/sensors",
+                name, $"{dev}_{id}", $"{dev}/{stateTopic}",
                 null, $"{{{{ value_json.{stateKey} }}}}", unit, devClass, device);
             await PublishAsync(
                 $"{_cfg.MqttHaDisc}/sensor/{dev}/{id}/config",
@@ -140,15 +145,43 @@ public sealed class MqttService : BackgroundService
                 retain: true, ct);
         }
 
-        await Sensor("ph", "pH Piscine", "PhValue", "pH", null);
-        await Sensor("orp", "ORP Piscine", "OrpMv", "mV", null);
-        await Sensor("water_temp", "Température eau", "WaterTempC", "°C", "temperature");
-        await Sensor("pump_freq", "Fréquence pompe", "OutFreqHz", "Hz", "frequency");
-        await Sensor("pump_power", "Puissance pompe", "OutPowerKw", "kW", "power");
-        // await Sensor("vfd_enable", "Statut variateur", "IsRunning", "", "
-        // IsFault
-        // FaultCode
-        
+        // ── Capteur binaire (binary_sensor) ───────────────────────────────────
+        // payload_on / payload_off : valeurs JSON attendues par HA
+        async Task BinarySensor(string id, string name, string stateKey,
+                                 string? devClass,
+                                 string stateTopic = "drive",
+                                 string payloadOn  = "true",
+                                 string payloadOff = "false")
+        {
+            var p = new HaBinaryDiscoveryPayload(
+                name, $"{dev}_{id}", $"{dev}/{stateTopic}",
+                $"{{{{ value_json.{stateKey} }}}}", devClass,
+                payloadOn, payloadOff, device);
+            await PublishAsync(
+                $"{_cfg.MqttHaDisc}/binary_sensor/{dev}/{id}/config",
+                JsonSerializer.Serialize(p, AppJsonContext.Default.HaBinaryDiscoveryPayload),
+                retain: true, ct);
+        }
+
+        // ── Capteurs eau (topic: {prefix}/sensors) ────────────────────────────
+        await Sensor("ph",         "pH Piscine",        "PhValue",    "pH",  null);
+        await Sensor("orp",        "ORP Piscine",       "OrpMv",      "mV",  null);
+        await Sensor("water_temp", "Température eau",   "WaterTempC", "°C",  "temperature");
+
+        // ── Capteurs variateur (topic: {prefix}/drive) ────────────────────────
+        await Sensor("pump_freq",       "Fréquence pompe",   "OutFreqHz",   "Hz",  "frequency", "drive");
+        await Sensor("pump_current",    "Courant pompe",     "OutCurrentA", "A",   "current",   "drive");
+        await Sensor("pump_voltage",    "Tension pompe",     "OutVoltageV", "V",   "voltage",   "drive");
+        await Sensor("pump_power",      "Puissance pompe",   "OutPowerKw",  "kW",  "power",     "drive");
+        await Sensor("pump_temp",       "Température variateur", "DriveTempC", "°C", "temperature", "drive");
+        await Sensor("pump_setpoint",   "Consigne fréquence","SetpointHz",  "Hz",  "frequency", "drive");
+        await Sensor("pump_fault_code", "Code défaut variateur", "FaultCode", "",  null,        "drive");
+        await Sensor("pump_fault_label","Libellé défaut",    "FaultLabel",  "",    null,        "drive");
+
+        // ── Capteurs binaires variateur (topic: {prefix}/drive) ───────────────
+        await BinarySensor("pump_running", "Pompe en marche",  "IsRunning", "running");
+        await BinarySensor("pump_fault",   "Défaut variateur", "IsFault",   "problem");
+        await BinarySensor("pump_at_setpoint", "À la consigne","AtSetpoint", null);
     }
 
     public override async Task StopAsync(CancellationToken ct)
