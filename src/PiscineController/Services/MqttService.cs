@@ -143,7 +143,12 @@ public sealed class MqttService : BackgroundService
         await Sensor("ph", "pH Piscine", "PhValue", "pH", null);
         await Sensor("orp", "ORP Piscine", "OrpMv", "mV", null);
         await Sensor("water_temp", "Température eau", "WaterTempC", "°C", "temperature");
-        await Sensor("pump_freq", "Fréquence pompe", "TargetFreqHz", "Hz", "frequency");
+        await Sensor("pump_freq", "Fréquence pompe", "OutFreqHz", "Hz", "frequency");
+        await Sensor("pump_power", "Puissance pompe", "OutPowerKw", "kW", "power");
+        // await Sensor("vfd_enable", "Statut variateur", "IsRunning", "", "
+        // IsFault
+        // FaultCode
+        
     }
 
     public override async Task StopAsync(CancellationToken ct)
