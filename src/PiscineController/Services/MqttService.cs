@@ -18,6 +18,10 @@ public sealed class MqttService : BackgroundService
     private readonly PhPidController _pid;
     private readonly ILogger<MqttService> _logger;
     private IMqttClient? _client;
+
+    // Protège contre les reconnexions simultanées
+    private int _reconnecting = 0;
+
     private static readonly TimeSpan[] Backoffs =
         [TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(4),
          TimeSpan.FromSeconds(8), TimeSpan.FromSeconds(16), TimeSpan.FromSeconds(30)];
@@ -35,11 +39,22 @@ public sealed class MqttService : BackgroundService
         var factory = new MqttClientFactory();
         _client = factory.CreateMqttClient();
         _client.ApplicationMessageReceivedAsync += OnMessageAsync;
+
+        // DisconnectedAsync : relance la reconnexion, mais une seule à la fois
         _client.DisconnectedAsync += async args =>
         {
             if (ct.IsCancellationRequested) return;
-            _logger.LogWarning("MQTT déconnecté, reconnexion...");
-            await ReconnectAsync(ct);
+            // Interlocked évite qu'une déconnexion en rafale lance plusieurs boucles
+            if (Interlocked.CompareExchange(ref _reconnecting, 1, 0) != 0) return;
+            try
+            {
+                _logger.LogWarning("MQTT déconnecté, reconnexion...");
+                await ReconnectAsync(ct);
+            }
+            finally
+            {
+                Interlocked.Exchange(ref _reconnecting, 0);
+            }
         };
 
         await ReconnectAsync(ct);
@@ -55,6 +70,9 @@ public sealed class MqttService : BackgroundService
         {
             try
             {
+                // Si déjà connecté (ex: reconnexion rapide), on sort immédiatement
+                if (_client!.IsConnected) return;
+
                 var opts = new MqttClientOptionsBuilder()
                     .WithTcpServer(_cfg.MqttBroker, _cfg.MqttPort)
                     .WithCredentials(_cfg.MqttUser, _cfg.MqttPassword)
@@ -63,11 +81,18 @@ public sealed class MqttService : BackgroundService
                     .WithWillPayload("offline")
                     .WithWillRetain(true)
                     .Build();
-                await _client!.ConnectAsync(opts, ct);
 
-                await _client.SubscribeAsync($"{_cfg.MqttPrefix}/cmd/#", MqttQualityOfServiceLevel.AtMostOnce, ct);
+                // ConnectAsync retourne seulement quand la connexion TCP+MQTT est établie
+                await _client.ConnectAsync(opts, ct);
+
+                // Subscribe après ConnectAsync — connexion garantie ici
+                await _client.SubscribeAsync(
+                    $"{_cfg.MqttPrefix}/cmd/#",
+                    MqttQualityOfServiceLevel.AtMostOnce,
+                    ct);
+
                 _logger.LogInformation("MQTT connecté à {Broker}", _cfg.MqttBroker);
-                await PublishAsync($"{_cfg.MqttPrefix}/status", "online", retain: true, ct);
+                await PublishAsync($"{_cfg.MqttPrefix}/status", "online", retain: true, ct: ct);
                 return;
             }
             catch (Exception ex) when (!ct.IsCancellationRequested)
@@ -79,7 +104,8 @@ public sealed class MqttService : BackgroundService
         }
     }
 
-    public async Task PublishAsync(string topic, string payload, bool retain = false, CancellationToken ct = default)
+    public async Task PublishAsync(string topic, string payload,
+        bool retain = false, CancellationToken ct = default)
     {
         if (_client?.IsConnected != true) return;
         try
@@ -129,9 +155,6 @@ public sealed class MqttService : BackgroundService
             [$"{_cfg.MqttPrefix}_controller"],
             "Piscine", "RPi3B+ / Atlas Scientific / WK600-D", "DIY");
 
-        // ── Capteur numérique (sensor) ────────────────────────────────────────
-        // stateTopic : sous-topic après {prefix}/ d'où HA lira le JSON
-        // Défaut "sensors" pour pH/ORP/temp, "drive" pour les données variateur
         async Task Sensor(string id, string name, string stateKey,
                           string unit, string? devClass,
                           string stateTopic = "sensors")
@@ -142,11 +165,9 @@ public sealed class MqttService : BackgroundService
             await PublishAsync(
                 $"{_cfg.MqttHaDisc}/sensor/{dev}/{id}/config",
                 JsonSerializer.Serialize(p, AppJsonContext.Default.HaDiscoveryPayload),
-                retain: true, ct);
+                retain: true, ct: ct);
         }
 
-        // ── Capteur binaire (binary_sensor) ───────────────────────────────────
-        // payload_on / payload_off : valeurs JSON attendues par HA
         async Task BinarySensor(string id, string name, string stateKey,
                                  string? devClass,
                                  string stateTopic = "drive",
@@ -160,7 +181,7 @@ public sealed class MqttService : BackgroundService
             await PublishAsync(
                 $"{_cfg.MqttHaDisc}/binary_sensor/{dev}/{id}/config",
                 JsonSerializer.Serialize(p, AppJsonContext.Default.HaBinaryDiscoveryPayload),
-                retain: true, ct);
+                retain: true, ct: ct);
         }
 
         // ── Capteurs eau (topic: {prefix}/sensors) ────────────────────────────
@@ -169,26 +190,26 @@ public sealed class MqttService : BackgroundService
         await Sensor("water_temp", "Température eau",   "WaterTempC", "°C",  "temperature");
 
         // ── Capteurs variateur (topic: {prefix}/drive) ────────────────────────
-        await Sensor("pump_freq",       "Fréquence pompe",   "OutFreqHz",   "Hz",  "frequency", "drive");
-        await Sensor("pump_current",    "Courant pompe",     "OutCurrentA", "A",   "current",   "drive");
-        await Sensor("pump_voltage",    "Tension pompe",     "OutVoltageV", "V",   "voltage",   "drive");
-        await Sensor("pump_power",      "Puissance pompe",   "OutPowerKw",  "kW",  "power",     "drive");
-        await Sensor("pump_temp",       "Température variateur", "DriveTempC", "°C", "temperature", "drive");
-        await Sensor("pump_setpoint",   "Consigne fréquence","SetpointHz",  "Hz",  "frequency", "drive");
-        await Sensor("pump_fault_code", "Code défaut variateur", "FaultCode", "",  null,        "drive");
-        await Sensor("pump_fault_label","Libellé défaut",    "FaultLabel",  "",    null,        "drive");
+        await Sensor("pump_freq",        "Fréquence pompe",       "OutFreqHz",   "Hz",  "frequency",   "drive");
+        await Sensor("pump_current",     "Courant pompe",         "OutCurrentA", "A",   "current",     "drive");
+        await Sensor("pump_voltage",     "Tension pompe",         "OutVoltageV", "V",   "voltage",     "drive");
+        await Sensor("pump_power",       "Puissance pompe",       "OutPowerKw",  "kW",  "power",       "drive");
+        await Sensor("pump_temp",        "Température variateur", "DriveTempC",  "°C",  "temperature", "drive");
+        await Sensor("pump_setpoint",    "Consigne fréquence",    "SetpointHz",  "Hz",  "frequency",   "drive");
+        await Sensor("pump_fault_code",  "Code défaut variateur", "FaultCode",   "",    null,          "drive");
+        await Sensor("pump_fault_label", "Libellé défaut",        "FaultLabel",  "",    null,          "drive");
 
         // ── Capteurs binaires variateur (topic: {prefix}/drive) ───────────────
-        await BinarySensor("pump_running", "Pompe en marche",  "IsRunning", "running");
-        await BinarySensor("pump_fault",   "Défaut variateur", "IsFault",   "problem");
-        await BinarySensor("pump_at_setpoint", "À la consigne","AtSetpoint", null);
+        await BinarySensor("pump_running",     "Pompe en marche",  "IsRunning",  "running");
+        await BinarySensor("pump_fault",       "Défaut variateur", "IsFault",    "problem");
+        await BinarySensor("pump_at_setpoint", "À la consigne",    "AtSetpoint", null);
     }
 
     public override async Task StopAsync(CancellationToken ct)
     {
         if (_client?.IsConnected == true)
         {
-            await PublishAsync($"{_cfg.MqttPrefix}/status", "offline", retain: true, ct);
+            await PublishAsync($"{_cfg.MqttPrefix}/status", "offline", retain: true, ct: ct);
             await _client.DisconnectAsync(new MqttClientDisconnectOptionsBuilder().Build(), ct);
         }
         await base.StopAsync(ct);
