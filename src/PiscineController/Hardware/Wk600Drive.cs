@@ -1,7 +1,4 @@
-using System;
 using System.IO.Ports;
-using System.Threading;
-using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using PiscineController.Config;
 
@@ -19,30 +16,55 @@ public sealed class Wk600Drive : IDisposable
 
     private static readonly Dictionary<int, string> FaultLabels = new()
     {
-        [0] = "Aucun", [1] = "Surintensité accel", [2] = "Surintensité décel",
-        [3] = "Surintensité const", [4] = "Surtension accel", [5] = "Surtension décel",
-        [6] = "Surtension const", [7] = "Sous-tension DC", [8] = "Surchauffe variateur",
-        [9] = "Surchauffe moteur", [10] = "Surcharge variateur", [11] = "Surcharge moteur",
-        [12] = "Entrée externe", [13] = "Communication", [14] = "Perte phase entrée",
-        [15] = "Perte phase sortie", [16] = "EEPROM", [17] = "CPU", [18] = "Court-circuit sortie",
+        [0]="Aucun", [1]="Surintensité accel", [2]="Surintensité décel",
+        [3]="Surintensité const", [4]="Surtension accel", [5]="Surtension décel",
+        [6]="Surtension const", [7]="Sous-tension DC", [8]="Surchauffe variateur",
+        [9]="Surchauffe moteur", [10]="Surcharge variateur", [11]="Surcharge moteur",
+        [12]="Entrée externe", [13]="Communication", [14]="Perte phase entrée",
+        [15]="Perte phase sortie", [16]="EEPROM", [17]="CPU", [18]="Court-circuit sortie",
     };
+
+    // ── Registres de contrôle (FC06) ─────────────────────────────────────────
+    private const ushort REG_FREQ_SETPOINT = 0x1000; // % fréquence max × 100 (-10000 à 10000)
+    private const ushort REG_COMMAND       = 0x2000; // Mot de commande
+
+    private const ushort CMD_FORWARD       = 0x0001; // Marche avant
+    private const ushort CMD_STOP_RAMP     = 0x0006; // Arrêt sur rampe
+    private const ushort CMD_FAULT_RESET   = 0x0007; // Reset défaut
+
+    // ── Registres de lecture (FC03) — groupe U0 base 0x7000 ──────────────────
+    // U0-00 0x7000 : Fréquence sortie     × 0.01 Hz
+    // U0-01 0x7001 : Courant sortie       × 0.1 A
+    // U0-02 0x7002 : Tension sortie       × 1 V
+    // U0-03 0x7003 : Tension bus DC       × 1 V
+    // U0-04 0x7004 : Vitesse moteur       × 1 RPM
+    // U0-05 0x7005 : Puissance sortie     × 0.1 kW
+    // U0-06 0x7006 : Couple sortie        × 0.1 %
+    // U0-07 0x7007 : Température          × 1 °C
+    // U0-08 0x7008 : Mot d'état
+    //   bit 0 : en marche
+    //   bit 1 : sens avant
+    //   bit 2 : sens arrière
+    //   bit 3 : défaut
+    //   bit 4 : alarme
+    // U0-09 0x7009 : Code défaut actuel
 
     public Wk600Drive(PoolConfig cfg, ILogger<Wk600Drive> logger)
     {
-        _cfg = cfg ?? throw new ArgumentNullException(nameof(cfg));
-        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _cfg = cfg;
+        _logger = logger;
         _slaveId = (byte)cfg.ModbusSlaveId;
         _port = new SerialPort(cfg.ModbusPort, cfg.ModbusBaudrate, Parity.None, 8, StopBits.One)
         {
-            ReadTimeout = 1000,
+            ReadTimeout  = 1000,
             WriteTimeout = 1000,
-            RtsEnable = false
+            RtsEnable    = true,
         };
         _port.Open();
-        _logger.LogInformation("WK600-D ouvert sur {Port}", cfg.ModbusPort);
+        _logger.LogInformation("WK600-D ouvert sur {Port} à {Baud} baud", cfg.ModbusPort, cfg.ModbusBaudrate);
     }
 
-    public bool IsRunning => _running;
+    public bool IsRunning     => _running;
     public double CurrentFreq => _currentFreq;
 
     // ── CRC-16 Modbus ────────────────────────────────────────────────────────
@@ -59,125 +81,84 @@ public sealed class Wk600Drive : IDisposable
     }
 
     // ── FC06 : écriture d'un registre ────────────────────────────────────────
-    private async Task<bool> WriteRegisterAsync(ushort addr, ushort value, CancellationToken ct)
+    private bool WriteRegister(ushort addr, ushort value)
     {
         lock (_lock)
         {
             _port.DiscardInBuffer();
 
             Span<byte> req = stackalloc byte[8];
-            req[0] = _slaveId;
-            req[1] = 0x06;
-            req[2] = (byte)(addr >> 8);
-            req[3] = (byte)(addr & 0xFF);
-            req[4] = (byte)(value >> 8);
-            req[5] = (byte)(value & 0xFF);
+            req[0] = _slaveId; req[1] = 0x06;
+            req[2] = (byte)(addr  >> 8); req[3] = (byte)(addr  & 0xFF);
+            req[4] = (byte)(value >> 8); req[5] = (byte)(value & 0xFF);
             ushort crc = Crc16(req[..6]);
-            req[6] = (byte)(crc & 0xFF);
-            req[7] = (byte)(crc >> 8);
-            _port.Write(req);
-        }
+            req[6] = (byte)(crc & 0xFF); req[7] = (byte)(crc >> 8);
+            _port.Write(req.ToArray(), 0, 8);
 
-        await Task.Delay(20, ct).ConfigureAwait(false);
-
-        byte[] resp = new byte[8];
-        int read = 0;
-        int attempts = 0;
-        while (read < 8 && attempts++ < 10)
-        {
-            try
-            {
+            byte[] resp = new byte[8];
+            int read = 0;
+            while (read < 8)
                 read += _port.Read(resp, read, 8 - read);
-            }
-            catch (TimeoutException)
+
+            ushort respCrc = Crc16(resp.AsSpan(0, 6));
+            ushort gotCrc  = (ushort)(resp[6] | (resp[7] << 8));
+            if (respCrc != gotCrc)
             {
-                _logger.LogWarning("WK600-D WriteRegister : Timeout sur la lecture de la réponse");
+                _logger.LogWarning("WK600-D WriteRegister CRC invalide addr=0x{Addr:X4}", addr);
                 return false;
             }
-        }
 
-        if (read < 8)
-        {
-            _logger.LogWarning("WK600-D WriteRegister : Réponse incomplète");
-            return false;
+            return resp[0] == _slaveId && resp[1] == 0x06;
         }
-
-        ushort respCrc = Crc16(resp.AsSpan(0, 6));
-        ushort gotCrc = (ushort)(resp[6] | (resp[7] << 8));
-        if (respCrc != gotCrc)
-        {
-            _logger.LogWarning("WK600-D Write CRC invalide addr=0x{Addr:X4}", addr);
-            return false;
-        }
-
-        return resp[0] == _slaveId && resp[1] == 0x06;
     }
 
     // ── FC03 : lecture de registres ──────────────────────────────────────────
-    private async Task<ushort[]?> ReadHoldingsAsync(ushort addr, ushort count, CancellationToken ct)
+    private ushort[]? ReadHoldingRegisters(ushort addr, ushort count)
     {
         lock (_lock)
         {
             _port.DiscardInBuffer();
 
             Span<byte> req = stackalloc byte[8];
-            req[0] = _slaveId;
-            req[1] = 0x03;
-            req[2] = (byte)(addr >> 8);
-            req[3] = (byte)(addr & 0xFF);
-            req[4] = (byte)(count >> 8);
-            req[5] = (byte)(count & 0xFF);
+            req[0] = _slaveId; req[1] = 0x03;
+            req[2] = (byte)(addr  >> 8); req[3] = (byte)(addr  & 0xFF);
+            req[4] = (byte)(count >> 8); req[5] = (byte)(count & 0xFF);
             ushort crc = Crc16(req[..6]);
-            req[6] = (byte)(crc & 0xFF);
-            req[7] = (byte)(crc >> 8);
-            _port.Write(req);
-        }
+            req[6] = (byte)(crc & 0xFF); req[7] = (byte)(crc >> 8);
+            _port.Write(req.ToArray(), 0, 8);
 
-        await Task.Delay(20, ct).ConfigureAwait(false);
-
-        int expected = 5 + count * 2;
-        byte[] resp = new byte[expected];
-        int read = 0;
-        while (read < expected)
-        {
-            try
-            {
+            int expected = 5 + count * 2;
+            byte[] resp = new byte[expected];
+            int read = 0;
+            while (read < expected)
                 read += _port.Read(resp, read, expected - read);
-            }
-            catch (TimeoutException)
+
+            if (resp[0] != _slaveId || resp[1] != 0x03)
+                return null;
+
+            ushort respCrc = Crc16(resp.AsSpan(0, expected - 2));
+            ushort gotCrc  = (ushort)(resp[expected - 2] | (resp[expected - 1] << 8));
+            if (respCrc != gotCrc)
             {
-                _logger.LogWarning("WK600-D ReadHoldings : Timeout sur la lecture de la réponse");
+                _logger.LogWarning("WK600-D ReadHoldingRegisters CRC invalide addr=0x{Addr:X4}", addr);
                 return null;
             }
-        }
 
-        if (resp[0] != _slaveId || resp[1] != 0x03)
-        {
-            _logger.LogWarning("WK600-D ReadHoldings : Réponse invalide (SlaveId ou fonction)");
-            return null;
+            var regs = new ushort[count];
+            for (int i = 0; i < count; i++)
+                regs[i] = (ushort)((resp[3 + i * 2] << 8) | resp[4 + i * 2]);
+            return regs;
         }
-
-        ushort respCrc = Crc16(resp.AsSpan(0, expected - 2));
-        ushort gotCrc = (ushort)(resp[expected - 2] | (resp[expected - 1] << 8));
-        if (respCrc != gotCrc)
-        {
-            _logger.LogWarning("WK600-D ReadHoldings CRC invalide addr=0x{Addr:X4}", addr);
-            return null;
-        }
-
-        var regs = new ushort[count];
-        for (int i = 0; i < count; i++)
-            regs[i] = (ushort)((resp[3 + i * 2] << 8) | resp[4 + i * 2]);
-        return regs;
     }
 
     // ── Consigne fréquence ───────────────────────────────────────────────────
-    private async Task SetFreqRawAsync(double hz, CancellationToken ct)
+    // Le registre 0x1000 attend un pourcentage de la fréquence max × 100
+    // Exemple : 25 Hz sur base 50 Hz → 50.00% → valeur 5000
+    private void SetFreqRaw(double hz)
     {
         double clamped = Math.Clamp(hz, _cfg.FreqMinAbsolute, _cfg.FreqNominal);
-        bool success = await WriteRegisterAsync(0x1000, (ushort)((clamped / 50.0) * 10000), ct).ConfigureAwait(false);
-        if (!success)
-            _logger.LogWarning("WK600-D : Échec de l'écriture de la fréquence");
+        ushort value   = (ushort)(clamped / _cfg.FreqNominal * 10000);
+        WriteRegister(REG_FREQ_SETPOINT, value);
         _currentFreq = clamped;
     }
 
@@ -190,22 +171,16 @@ public sealed class Wk600Drive : IDisposable
             Math.Clamp(targetHz, _cfg.FreqMinAbsolute, _cfg.FreqNominal),
             _cfg.FreqStartMin);
 
-        await SetFreqRawAsync(_cfg.FreqStartMin, ct).ConfigureAwait(false);
-        bool success = await WriteRegisterAsync(0x2000, 0x0001, ct).ConfigureAwait(false); // RUN avant
-        if (!success)
-        {
-            _logger.LogWarning("WK600-D : Échec du démarrage (RUN)");
-            return;
-        }
-
-        _running = true;
+        SetFreqRaw(_cfg.FreqStartMin);
+        WriteRegister(REG_COMMAND, CMD_FORWARD);
+        _running     = true;
         _currentFreq = _cfg.FreqStartMin;
 
         double freq = _cfg.FreqStartMin;
         while (freq < target && !ct.IsCancellationRequested)
         {
             freq = Math.Min(freq + _cfg.FreqRampStep, target);
-            await SetFreqRawAsync(freq, ct).ConfigureAwait(false);
+            SetFreqRaw(freq);
             await Task.Delay((int)(_cfg.FreqRampDelay * 1000), ct).ConfigureAwait(false);
         }
 
@@ -221,14 +196,14 @@ public sealed class Wk600Drive : IDisposable
         if (Math.Abs(target - _currentFreq) < 0.5) return;
 
         double freq = _currentFreq;
-        double dir = target > freq ? 1 : -1;
+        double dir  = target > freq ? 1 : -1;
 
-        while ((dir > 0 && freq < target) || (dir < 0 && freq > target))
+        while (dir > 0 ? freq < target : freq > target)
         {
             freq = Math.Clamp(freq + dir * _cfg.FreqRampStep, _cfg.FreqMinAbsolute, _cfg.FreqNominal);
             if (dir > 0 && freq > target) freq = target;
             if (dir < 0 && freq < target) freq = target;
-            await SetFreqRawAsync(freq, ct).ConfigureAwait(false);
+            SetFreqRaw(freq);
             await Task.Delay((int)(_cfg.FreqRampDelay * 1000), ct).ConfigureAwait(false);
         }
 
@@ -244,99 +219,77 @@ public sealed class Wk600Drive : IDisposable
         while (freq > _cfg.FreqStartMin && !ct.IsCancellationRequested)
         {
             freq = Math.Max(freq - _cfg.FreqRampStep, _cfg.FreqStartMin);
-            await SetFreqRawAsync(freq, ct).ConfigureAwait(false);
+            SetFreqRaw(freq);
             await Task.Delay((int)(_cfg.FreqRampDelay * 1000), ct).ConfigureAwait(false);
         }
 
-        bool success = await WriteRegisterAsync(0x2000, 0x0006, ct).ConfigureAwait(false); // STOP
-        if (!success)
-            _logger.LogWarning("WK600-D : Échec de l'arrêt (STOP)");
-
-        _running = false;
+        WriteRegister(REG_COMMAND, CMD_STOP_RAMP);
+        _running     = false;
         _currentFreq = 0;
         _logger.LogInformation("WK600-D arrêté");
     }
 
     // ── Reset défaut ──────────────────────────────────────────────────────────
-    public async Task FaultResetAsync(CancellationToken ct)
-    {
-        bool success = await WriteRegisterAsync(0x2000, 0x0007, ct).ConfigureAwait(false);
-        if (!success)
-            _logger.LogWarning("WK600-D : Échec du reset des défauts");
-    }
+    public void FaultReset() => WriteRegister(REG_COMMAND, CMD_FAULT_RESET);
 
-    // ── Lecture mesures ───────────────────────────────────────────────────────
-    public async Task<DriveStatusSnapshot> ReadStatusAsync(CancellationToken ct)
+    // ── Lecture état complet (U0-00 à U0-09, 10 registres) ───────────────────
+    public DriveStatusSnapshot ReadStatus()
     {
-        var m = await ReadHoldingsAsync(0x7000, 6, ct).ConfigureAwait(false);
+        var m = ReadHoldingRegisters(0x7000, 10);
         if (m == null)
         {
-            _logger.LogWarning("WK600-D ReadStatus : pas de réponse (mesures)");
-            return new DriveStatusSnapshot
-            {
-                IsRunning = _running,
-                SetpointHz = _currentFreq,
-                FaultLabel = "Aucune donnée disponible"
-            };
+            _logger.LogWarning("WK600-D ReadStatus : pas de réponse");
+            return new DriveStatusSnapshot { IsRunning = _running, SetpointHz = _currentFreq };
         }
 
-        // Lecture état + défaut (2 registres contigus 0x703D–0x703E)
-        var s = await ReadHoldingsAsync(0x703D, 2, ct).ConfigureAwait(false);
-        ushort sw = s != null && s.Length >= 1 ? s[0] : (ushort)0;
-        int faultCode = s != null && s.Length >= 2 ? s[1] : 0;
-
-        // U0-61 bits : 0=Running, 3=Fault, 7=AtSetpoint
-        bool isRunning = (sw & (1 << 0)) != 0;
-        bool isFault = (sw & (1 << 3)) != 0;
+        ushort sw       = m[8];
+        bool isRunning  = (sw & (1 << 0)) != 0;
+        bool isFault    = (sw & (1 << 3)) != 0;
         bool atSetpoint = (sw & (1 << 7)) != 0;
+        int faultCode   = m[9];
         _running = isRunning;
 
         return new DriveStatusSnapshot
         {
-            OutFreqHz = m[0] * 0.01,
-            OutCurrentA = m[1] * 0.1,
-            OutVoltageV = m[2],
-            DcBusV = m[3],
-            OutPowerKw = m[5] * 0.1,
-            DriveTempC = 0, // Non disponible dans ce bloc
-            IsRunning = isRunning,
-            IsFault = isFault,
-            AtSetpoint = atSetpoint,
-            FaultCode = faultCode,
-            FaultLabel = FaultLabels.TryGetValue(faultCode, out var lbl) ? lbl : $"Code {faultCode}",
-            SetpointHz = _currentFreq,
-            RunTimeH = 0, // Non disponible dans ce bloc
+            OutFreqHz   = m[0] * 0.01,   // U0-00 : fréquence sortie  (0.01 Hz)
+            OutCurrentA = m[1] * 0.1,    // U0-01 : courant sortie    (0.1 A)
+            OutVoltageV = m[2],           // U0-02 : tension sortie    (1 V)
+            DcBusV      = m[3],           // U0-03 : tension bus DC    (1 V)
+            MotorRpm    = m[4],           // U0-04 : vitesse moteur    (1 RPM)
+            OutPowerKw  = m[5] * 0.1,    // U0-05 : puissance sortie  (0.1 kW)
+            OutTorquePct= m[6] * 0.1,    // U0-06 : couple sortie     (0.1 %)
+            DriveTempC  = m[7],           // U0-07 : température       (1 °C)
+            IsRunning   = isRunning,
+            IsFault     = isFault,
+            AtSetpoint  = atSetpoint,
+            FaultCode   = faultCode,      // U0-09 : code défaut
+            FaultLabel  = FaultLabels.TryGetValue(faultCode, out var lbl) ? lbl : $"Code {faultCode}",
+            SetpointHz  = _currentFreq,
         };
     }
 
     public void Dispose()
     {
-        try
-        {
-            if (_port.IsOpen)
-                _port.Close();
-            _port.Dispose();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Erreur lors de la fermeture du port série WK600-D");
-        }
+        try { _port.Close(); _port.Dispose(); } catch { /* best-effort */ }
     }
 }
 
 public sealed class DriveStatusSnapshot
 {
-    public double OutFreqHz { get; init; }
-    public double OutCurrentA { get; init; }
-    public double OutVoltageV { get; init; }
-    public double DcBusV { get; init; }
-    public double OutPowerKw { get; init; }
-    public double SetpointHz { get; init; }
-    public bool IsRunning { get; init; }
-    public bool IsFault { get; init; }
-    public bool AtSetpoint { get; init; }
-    public int FaultCode { get; init; }
-    public string FaultLabel { get; init; } = "Aucun";
-    public double DriveTempC { get; init; }
-    public int RunTimeH { get; init; }
+    public double OutFreqHz    { get; init; }
+    public double OutCurrentA  { get; init; }
+    public double OutVoltageV  { get; init; }
+    public double DcBusV       { get; init; }
+    public int    MotorRpm     { get; init; }
+    public double OutPowerKw   { get; init; }
+    public double OutTorquePct { get; init; }
+    public double DriveTempC   { get; init; }
+    public bool   IsRunning    { get; init; }
+    public bool   IsFault      { get; init; }
+    public bool   AtSetpoint   { get; init; }
+    public int    FaultCode    { get; init; }
+    public string FaultLabel   { get; init; } = "Aucun";
+    public double SetpointHz   { get; init; }
+    // Compatibilité DriveService
+    public int    RunTimeH     { get; init; }
 }
