@@ -134,8 +134,18 @@ public sealed class Wk600Drive : IDisposable
             int expected = 5 + count * 2;
             byte[] resp = new byte[expected];
             int read = 0;
-            while (read < expected)
-                read += _port.Read(resp, read, expected - read);
+            try
+            {
+                while (read < expected)
+                    read += _port.Read(resp, read, expected - read);
+            }
+            catch (TimeoutException)
+            {
+                _logger.LogWarning("WK600-D ReadHoldingRegisters timeout addr=0x{Addr:X4} " +
+                                   "({Read}/{Expected} octets reçus)", addr, read, expected);
+                _port.DiscardInBuffer();   // évite de polluer la prochaine requête
+                return null;
+            }
 
             if (resp[0] != _slaveId || resp[1] != 0x03)
                 return null;
@@ -235,23 +245,59 @@ public sealed class Wk600Drive : IDisposable
     public void FaultReset() => WriteRegister(REG_COMMAND, CMD_FAULT_RESET);
 
     // ── Lecture état complet ────────────────────────────────────────────────
+    // Délai entre deux requêtes FC03 successives : certains variateurs ont besoin
+    // d'un court répit pour traiter une nouvelle requête après avoir répondu.
+    // 50ms s'est révélé insuffisant en pratique (timeouts intermittents sur 0x703D,
+    // alors que le registre répond correctement via un autre client Modbus) —
+    // augmenté à 150ms et complété par un retry pour absorber les cas résiduels.
+    private const int InterRequestDelayMs = 150;
+    private const int MaxRetries = 2;
+
+    private ushort[]? ReadWithRetry(ushort addr, ushort count, string label)
+    {
+        for (int attempt = 1; attempt <= MaxRetries; attempt++)
+        {
+            var regs = ReadHoldingRegisters(addr, count);
+            if (regs != null) return regs;
+
+            if (attempt < MaxRetries)
+            {
+                _logger.LogDebug("WK600-D: {Label} (0x{Addr:X4}) timeout, " +
+                                  "tentative {Attempt}/{Max}", label, addr, attempt, MaxRetries);
+                Thread.Sleep(InterRequestDelayMs * 2);   // pause plus longue avant retry
+            }
+        }
+        return null;
+    }
+
     public DriveStatusSnapshot ReadStatus()
     {
         // Bloc A : fréquence / tensions / courant / puissance / couple
-        var a = ReadHoldingRegisters(0x7000, 7);   // 0x7000 → 0x7006
-        // Bloc B : état marche/arrêt + code défaut
-        var b = ReadHoldingRegisters(0x703D, 2);   // 0x703D → 0x703E
-        // Registre isolé : température moteur
-        var t = ReadHoldingRegisters(0x7022, 1);
+        var a = ReadWithRetry(0x7000, 7, "bloc A");
+        Thread.Sleep(InterRequestDelayMs);
 
-        if (a == null || b == null)
+        // Bloc B : état marche/arrêt + code défaut (registre confirmé valide via
+        // test Python indépendant — un éventuel échec ici est transitoire, pas
+        // une absence du registre sur ce firmware)
+        var b = ReadWithRetry(0x703D, 2, "bloc B (U0-61/U0-62)");
+        if (b == null)
+            _logger.LogWarning("WK600-D : lecture U0-61/U0-62 (0x703D) échouée " +
+                               "après {Max} tentatives — état marche conservé", MaxRetries);
+        Thread.Sleep(InterRequestDelayMs);
+
+        // Registre isolé : température moteur
+        var t = ReadWithRetry(0x7022, 1, "température moteur");
+
+        if (a == null)
         {
-            _logger.LogWarning("WK600-D ReadStatus : pas de réponse");
+            _logger.LogWarning("WK600-D ReadStatus : bloc principal (0x7000) sans réponse");
             return new DriveStatusSnapshot { IsRunning = _running, SetpointHz = _currentFreq };
         }
 
-        bool isRunning = b[0] == 1;          // U0-61 : valeur simple 0/1, pas des bits
-        int faultCode  = b[1];               // U0-62
+        // Bloc B optionnel : si absent, on garde le dernier état connu plutôt que
+        // de perdre toutes les autres mesures qui ont, elles, été lues avec succès.
+        bool isRunning = b != null ? b[0] == 1 : _running;
+        int faultCode  = b != null ? b[1] : 0;
         bool isFault   = faultCode != 0;
         double tempC   = t != null ? t[0] : 0.0;  // U0-34, absente si la lecture a échoué
 
@@ -263,11 +309,12 @@ public sealed class Wk600Drive : IDisposable
             SetpointFreqHz = a[1] * 0.01, // U0-01 : fréquence consigne (0.01 Hz)
             DcBusV       = a[2] * 0.1,    // U0-02 : tension bus DC     (0.1 V)
             OutVoltageV  = a[3],           // U0-03 : tension sortie     (1 V)
-            OutCurrentA  = a[4] * 0.01,   // U0-04 : courant sortie     (0.01 A)
+            OutCurrentA  = a[4] * 0.1,   // U0-04 : courant sortie     (0.01 A)
             OutPowerKw   = a[5] * 10,    // U0-05 : puissance sortie   (0.1 kW)
-            //OutTorquePct = a[6] * 0.1,    // U0-06 : couple sortie      (0.1 %)
+            OutTorquePct = a[6] * 0.1,    // U0-06 : couple sortie      (0.1 %)
             DriveTempC   = tempC,          // U0-34 : température moteur (1 °C)
             IsRunning    = isRunning,       // U0-61
+
             IsFault      = isFault,
             AtSetpoint   = Math.Abs(a[0] * 0.01 - _currentFreq) < 0.5,
             FaultCode    = faultCode,       // U0-62
