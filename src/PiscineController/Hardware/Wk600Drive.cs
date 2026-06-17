@@ -255,7 +255,7 @@ public sealed class Wk600Drive : IDisposable
             DcBusV      = m[2],          // U0-02 : tension bus DC    (1 V)
             OutVoltageV = m[3],          // U0-03 : tension sortie    (1 V)
             OutCurrentA = m[4] * 0.1,    // U0-04 : courant sortie    (0.1 A)
-            OutPowerKw  = m[5],    // U0-05 : puissance sortie  (0.1 kW)
+            OutPowerKw  = m[5] * 10,    // U0-05 : puissance sortie  (0.1 kW)
             //MotorRpm    = m[4],           // U0-0? : vitesse moteur    (1 RPM)
             //OutTorquePct= m[6] * 0.1,    // U0-0? : couple sortie     (0.1 %)
             //DriveTempC  = m[7],           // U0-0? : température       (1 °C)
