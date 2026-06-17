@@ -35,7 +35,7 @@ public sealed class DriveService : BackgroundService
 
                 var payload = new DriveStatusPayload(
                     snap.OutFreqHz, snap.OutCurrentA, snap.OutVoltageV,
-                    snap.OutPowerKw, snap.DriveTempC, snap.RunTimeH,
+                    snap.OutPowerKw, snap.RunTimeH,
                     snap.FaultCode, snap.FaultLabel,
                     snap.IsRunning, snap.IsFault, snap.AtSetpoint, snap.SetpointHz);
 
