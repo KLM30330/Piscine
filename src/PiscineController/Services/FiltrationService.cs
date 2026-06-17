@@ -28,7 +28,20 @@ public sealed class FiltrationService : BackgroundService
         {
             try
             {
-                if (_filtration.Mode == FilterMode.Auto && _filtration.NeedsRebuild())
+                // _state.WaterTempC vaut 0.0 (défaut du type double) jusqu'à ce que
+                // SensorService ait effectué sa première lecture EZO RTD. Construire
+                // le planning avec une température à 0°C produit un nombre d'heures
+                // de filtration ridiculement bas (proche du minimum hydraulique),
+                // ce qui tronque le créneau du jour. On attend une vraie lecture.
+                bool tempReady = _state.WaterTempC > 0.0;
+
+                if (!tempReady && _filtration.Mode == FilterMode.Auto && _filtration.NeedsRebuild())
+                {
+                    _logger.LogDebug("FiltrationService: en attente d'une lecture de " +
+                                      "température valide avant de construire le planning");
+                }
+
+                if (_filtration.Mode == FilterMode.Auto && _filtration.NeedsRebuild() && tempReady)
                 {
                     // Le planning quotidien doit être basé sur la fréquence NOMINALE,
                     // pas sur la fréquence ORP instantanée (_filtration.TargetFreqHz).
