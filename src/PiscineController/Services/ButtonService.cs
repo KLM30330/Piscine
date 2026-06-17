@@ -17,6 +17,10 @@ public sealed class ButtonService : BackgroundService
     private readonly DisplayService _display;
     private readonly ILogger<ButtonService> _logger;
 
+    // Empêche deux amorçages concurrents si le bouton est pressé plusieurs
+    // fois pendant le chrono (éviterait un sur-dosage cumulé).
+    private int _priming;
+
     public ButtonService(PoolConfig cfg, PoolState state,
         GpioButtons buttons, FiltrationManager filtration,
         EzoPmp pmp, DisplayService display, ILogger<ButtonService> logger)
@@ -45,9 +49,45 @@ public sealed class ButtonService : BackgroundService
 
     private void OnPrimePump()
     {
+        if (Interlocked.CompareExchange(ref _priming, 1, 0) != 0)
+        {
+            _logger.LogDebug("Amorçage déjà en cours, appui ignoré");
+            return;
+        }
         _logger.LogInformation("Amorçage pompe doseuse {Vol} mL", _cfg.PrimeVolumeMl);
-        _display.Show("Amorcage pompe", $"{_cfg.PrimeVolumeMl} mL...", 3000);
-        Task.Run(() => _pmp.Dose(_cfg.PrimeVolumeMl));
+        _ = RunPrimePumpAsync(_cfg.PrimeVolumeMl);
+    }
+
+    // Affiche un chrono pendant toute la durée réelle du dosage (au lieu
+    // d'un texte statique de 3s), conformément au README : "affichage LCD
+    // 'amorçage ph- ' + chrono".
+    private async Task RunPrimePumpAsync(double volumeMl)
+    {
+        try
+        {
+            int totalMs = EzoPmp.EstimateDoseMs(volumeMl);
+            int totalSeconds = Math.Max(1, (int)Math.Ceiling(totalMs / 1000.0));
+
+            var doseTask = Task.Run(() => _pmp.Dose(volumeMl));
+
+            for (int elapsed = 1; elapsed <= totalSeconds; elapsed++)
+            {
+                _display.Show("Amorcage ph-", $"{elapsed}/{totalSeconds}s...", 1100);
+                await Task.Delay(1000);
+            }
+
+            await doseTask;
+            _display.Show("Amorcage ph-", "Termine", 2000);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Amorçage pompe: échec du dosage {Vol} mL", volumeMl);
+            _display.Show("Amorcage ph-", "ERREUR", 2000);
+        }
+        finally
+        {
+            Interlocked.Exchange(ref _priming, 0);
+        }
     }
 
     private void OnPauseFilter()
@@ -55,7 +95,9 @@ public sealed class ButtonService : BackgroundService
         _logger.LogInformation("Pause filtration (bouton)");
         _filtration.SetMode("pause");
         _state.FilterMode = FilterMode.Pause;
-        _display.Show("Filtration", "EN PAUSE", 3000);
+        // 30s comme annoncé dans le README (et non 3s) : même durée que le
+        // bouton 1 (LcdDisplayDuration), désormais cohérente avec la doc.
+        _display.Show("Filtration", "EN PAUSE", _cfg.LcdDisplayDuration * 1000);
     }
 
     private void OnResumeFilter()
@@ -63,6 +105,6 @@ public sealed class ButtonService : BackgroundService
         _logger.LogInformation("Reprise filtration auto (bouton)");
         _filtration.ResumeAuto();
         _state.FilterMode = FilterMode.Auto;
-        _display.Show("Filtration", "AUTO", 3000);
+        _display.Show("Filtration", "AUTO", _cfg.LcdDisplayDuration * 1000);
     }
 }
