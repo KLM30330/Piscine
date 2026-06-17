@@ -63,13 +63,16 @@ public sealed class FiltrationService : BackgroundService
                 {
                     _logger.LogInformation("Démarrage pompe @ {Freq} Hz", targetFreq);
                     await _drive.RampStartAsync(targetFreq, ct);
-                    _state.PumpRunning = true;
+                    // Ne pas supposer le succès : si RampStartAsync a échoué (timeout
+                    // Modbus), _drive.IsRunning reste false et on retentera au cycle
+                    // suivant plutôt que de mentir sur l'état réel de la pompe.
+                    _state.PumpRunning = _drive.IsRunning;
                 }
                 else if (!shouldRun && _drive.IsRunning)
                 {
                     _logger.LogInformation("Arrêt pompe");
                     await _drive.RampStopAsync(ct);
-                    _state.PumpRunning = false;
+                    _state.PumpRunning = _drive.IsRunning;
                 }
                 else if (shouldRun && _drive.IsRunning
                       && Math.Abs(targetFreq - _drive.CurrentFreq) > 2.0
