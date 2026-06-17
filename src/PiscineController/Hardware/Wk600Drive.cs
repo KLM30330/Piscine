@@ -252,13 +252,13 @@ public sealed class Wk600Drive : IDisposable
         return new DriveStatusSnapshot
         {
             OutFreqHz   = m[0] * 0.01,   // U0-00 : fréquence sortie  (0.01 Hz)
-            OutCurrentA = m[1] * 0.1,    // U0-01 : courant sortie    (0.1 A)
-            OutVoltageV = m[2],           // U0-02 : tension sortie    (1 V)
-            DcBusV      = m[3],           // U0-03 : tension bus DC    (1 V)
-            MotorRpm    = m[4],           // U0-04 : vitesse moteur    (1 RPM)
+            DcBusV      = m[2],          // U0-02 : tension bus DC    (1 V)
+            OutVoltageV = m[3],          // U0-03 : tension sortie    (1 V)
+            OutCurrentA = m[4] * 0.1,    // U0-04 : courant sortie    (0.1 A)
             OutPowerKw  = m[5] * 0.1,    // U0-05 : puissance sortie  (0.1 kW)
-            OutTorquePct= m[6] * 0.1,    // U0-06 : couple sortie     (0.1 %)
-            DriveTempC  = m[7],           // U0-07 : température       (1 °C)
+            //MotorRpm    = m[4],           // U0-0? : vitesse moteur    (1 RPM)
+            //OutTorquePct= m[6] * 0.1,    // U0-0? : couple sortie     (0.1 %)
+            //DriveTempC  = m[7],           // U0-0? : température       (1 °C)
             IsRunning   = isRunning,
             IsFault     = isFault,
             AtSetpoint  = atSetpoint,
