@@ -18,7 +18,7 @@ public sealed record SensorPayload(
 
 public sealed record DriveStatusPayload(
     double OutFreqHz, double OutCurrentA, double OutVoltageV,
-    double OutPowerKw, double DriveTempC, int RunTimeH,
+    double OutPowerKw, int RunTimeH,
     int FaultCode, string FaultLabel, bool IsRunning, bool IsFault,
     bool AtSetpoint, double SetpointHz);
 
