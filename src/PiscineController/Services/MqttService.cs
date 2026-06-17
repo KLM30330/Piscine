@@ -44,7 +44,6 @@ public sealed class MqttService : BackgroundService
         _client.DisconnectedAsync += async args =>
         {
             if (ct.IsCancellationRequested) return;
-            // Interlocked évite qu'une déconnexion en rafale lance plusieurs boucles
             if (Interlocked.CompareExchange(ref _reconnecting, 1, 0) != 0) return;
             try
             {
@@ -70,7 +69,6 @@ public sealed class MqttService : BackgroundService
         {
             try
             {
-                // Si déjà connecté (ex: reconnexion rapide), on sort immédiatement
                 if (_client!.IsConnected) return;
 
                 var opts = new MqttClientOptionsBuilder()
@@ -82,10 +80,8 @@ public sealed class MqttService : BackgroundService
                     .WithWillRetain(true)
                     .Build();
 
-                // ConnectAsync retourne seulement quand la connexion TCP+MQTT est établie
                 await _client.ConnectAsync(opts, ct);
 
-                // Subscribe après ConnectAsync — connexion garantie ici
                 await _client.SubscribeAsync(
                     $"{_cfg.MqttPrefix}/cmd/#",
                     MqttQualityOfServiceLevel.AtMostOnce,
@@ -189,6 +185,9 @@ public sealed class MqttService : BackgroundService
         await Sensor("orp",        "ORP Piscine",       "OrpMv",      "mV",  null);
         await Sensor("water_temp", "Température eau",   "WaterTempC", "°C",  "temperature");
 
+        // ── Suivi dosage pH (topic: {prefix}/sensors) ──────────────────────────
+        await Sensor("ph_dose_total", "Total acide injecté", "PhDoseTotalMl", "mL", "volume");
+
         // ── Capteurs variateur (topic: {prefix}/drive) ────────────────────────
         await Sensor("pump_freq",        "Fréquence pompe",       "OutFreqHz",   "Hz",  "frequency",   "drive");
         await Sensor("pump_current",     "Courant pompe",         "OutCurrentA", "A",   "current",     "drive");
@@ -203,6 +202,10 @@ public sealed class MqttService : BackgroundService
         await BinarySensor("pump_running",     "Pompe en marche",  "IsRunning",  "running");
         await BinarySensor("pump_fault",       "Défaut variateur", "IsFault",    "problem");
         await BinarySensor("pump_at_setpoint", "À la consigne",    "AtSetpoint", null);
+
+        // ── Alarmes pH/ORP (topic: {prefix}/sensors) ───────────────────────────
+        await BinarySensor("ph_alarm_low",  "Alarme pH bas",  "PhAlarmLow", "problem", "sensors");
+        await BinarySensor("orp_alarm",     "Alarme ORP",     "OrpAlarm",   "problem", "sensors");
     }
 
     public override async Task StopAsync(CancellationToken ct)
