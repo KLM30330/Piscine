@@ -164,15 +164,30 @@ public sealed class MqttService : BackgroundService
                 retain: true, ct: ct);
         }
 
-        async Task BinarySensor(string id, string name, string stateKey,
+        async Task BinarySensor(string id, string name, string? stateKey,
                                  string? devClass,
                                  string stateTopic = "drive",
-                                 string payloadOn  = "true",
-                                 string payloadOff = "false")
+                                 string payloadOn  = "ON",
+                                 string payloadOff = "OFF",
+                                 string? topicOverride = null)
         {
+            // value_template : Home Assistant parse le payload JSON puis évalue le
+            // template Jinja2. Un booléen JSON true/false devient un booléen Python
+            // True/False, et "{{ value_json.X }}" rend donc littéralement "True"/
+            // "False" (majuscule) — qui ne correspondait à AUCUN des payload_on/off
+            // ("true"/"false" en minuscule), d'où l'état "inconnue" affiché côté HA
+            // pour tous les binary_sensor. On force ici un rendu textuel ON/OFF
+            // non ambigu, identique au payload_on/payload_off attendu.
+            // stateKey = null → pas de JSON, le topic transporte déjà "ON"/"OFF"
+            // en texte brut (cas de l'électrolyseur, publié directement ainsi).
+            string topic = topicOverride ?? $"{dev}/{stateTopic}";
+            string? template = stateKey != null
+                ? $"{{{{ 'ON' if value_json.{stateKey} else 'OFF' }}}}"
+                : null;
+
             var p = new HaBinaryDiscoveryPayload(
-                name, $"{dev}_{id}", $"{dev}/{stateTopic}",
-                $"{{{{ value_json.{stateKey} }}}}", devClass,
+                name, $"{dev}_{id}", topic,
+                template, devClass,
                 payloadOn, payloadOff, device);
             await PublishAsync(
                 $"{_cfg.MqttHaDisc}/binary_sensor/{dev}/{id}/config",
@@ -193,7 +208,6 @@ public sealed class MqttService : BackgroundService
         await Sensor("pump_current",     "Courant pompe",         "OutCurrentA", "A",   "current",     "drive");
         await Sensor("pump_voltage",     "Tension pompe",         "OutVoltageV", "V",   "voltage",     "drive");
         await Sensor("pump_power",       "Puissance pompe",       "OutPowerKw",  "W",  "power",       "drive");
-        // await Sensor("pump_temp",        "Température variateur", "DriveTempC",  "°C",  "temperature", "drive");
         await Sensor("pump_setpoint",    "Consigne fréquence",    "SetpointHz",  "Hz",  "frequency",   "drive");
         await Sensor("pump_fault_code",  "Code défaut variateur", "FaultCode",   "",    null,          "drive");
         await Sensor("pump_fault_label", "Libellé défaut",        "FaultLabel",  "",    null,          "drive");
@@ -206,6 +220,11 @@ public sealed class MqttService : BackgroundService
         // ── Alarmes pH/ORP (topic: {prefix}/sensors) ───────────────────────────
         await BinarySensor("ph_alarm_low",  "Alarme pH bas",  "PhAlarmLow", "problem", "sensors");
         await BinarySensor("orp_alarm",     "Alarme ORP",     "OrpAlarm",   "problem", "sensors");
+
+        // ── Électrolyseur (topic dédié {prefix}/electrolyzer/state, déjà publié
+        // en texte brut "ON"/"OFF" par ElectrolyzerService — pas de JSON ici) ───
+        await BinarySensor("electrolyzer_running", "Electrolyseur en fonctionnement",
+            null, "running", topicOverride: $"{dev}/electrolyzer/state");
     }
 
     public override async Task StopAsync(CancellationToken ct)
