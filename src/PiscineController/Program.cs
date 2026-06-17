@@ -91,6 +91,8 @@ var host = Host.CreateDefaultBuilder(args)
         services.AddHostedService(sp => new ElectrolyzerService(
             sp.GetRequiredService<PoolState>(),
             sp.GetRequiredService<Pcf8574>(),
+            sp.GetRequiredService<MqttService>(),
+            sp.GetRequiredService<PoolConfig>(),
             sp.GetRequiredService<ILogger<ElectrolyzerService>>()));
         services.AddHostedService(sp => new PumpTempService(
             sp.GetRequiredService<PoolConfig>(),
