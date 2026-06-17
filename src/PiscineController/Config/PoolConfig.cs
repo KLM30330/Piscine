@@ -64,11 +64,17 @@ public sealed class PoolConfig
     // pH PID
     public double PhTarget { get; set; } = 7.2;
     public double PhDeadband { get; set; } = 0.05;
-    public double PhKp { get; set; } = 10.0;
-    public double PhKi { get; set; } = 0.1;
-    public double PhKd { get; set; } = 1.0;
+    // Recalibré pour retrouver l'intensité de dosage de l'ancien flux Node-RED
+    // (ml = (pH-7.2) × 1000, sans plafond) tout en gardant un plafond de
+    // sécurité (PhDoseMaxMl) que l'ancien flux n'avait pas. Avec Kp=1000,
+    // un écart de 0.1 pH (le plus petit pas significatif observé côté capteur)
+    // donne ≈100 mL au premier cycle, comme avant — mais ne dépasse jamais
+    // PhDoseMaxMl, même pour un écart de pH beaucoup plus grand.
+    public double PhKp { get; set; } = 1000.0;
+    public double PhKi { get; set; } = 1.0;
+    public double PhKd { get; set; } = 10.0;
     public double PhDoseMinMl { get; set; } = 1.0;
-    public double PhDoseMaxMl { get; set; } = 50.0;
+    public double PhDoseMaxMl { get; set; } = 100.0;
     public double PhMinDelayS { get; set; } = 600.0;
     public double PrimeVolumeMl { get; set; } = 20.0;
 
