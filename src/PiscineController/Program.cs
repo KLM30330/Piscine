@@ -75,6 +75,7 @@ var host = Host.CreateDefaultBuilder(args)
         // DisplayService — singleton pour que ButtonService puisse le résoudre directement
         services.AddSingleton(sp => new DisplayService(
             sp.GetRequiredService<Lcd1602>(),
+            sp.GetRequiredService<PoolConfig>(),
             sp.GetRequiredService<ILogger<DisplayService>>()));
         services.AddHostedService(sp => sp.GetRequiredService<DisplayService>());
 
