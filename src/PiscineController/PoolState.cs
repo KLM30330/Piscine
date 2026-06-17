@@ -11,6 +11,7 @@ public sealed class PoolState
     private double _pumpFreqHz;
     private int _filterMode;
     private int _pumpRunning;
+    private int _electrolyzerRunning;
 
     public double WaterTempC
     {
@@ -41,6 +42,11 @@ public sealed class PoolState
     {
         get => Volatile.Read(ref _pumpRunning) == 1;
         set => Volatile.Write(ref _pumpRunning, value ? 1 : 0);
+    }
+    public bool ElectrolyzerRunning
+    {
+        get => Volatile.Read(ref _electrolyzerRunning) == 1;
+        set => Volatile.Write(ref _electrolyzerRunning, value ? 1 : 0);
     }
 
     private readonly object _driveLock = new();
