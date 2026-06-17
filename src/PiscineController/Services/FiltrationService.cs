@@ -29,7 +29,19 @@ public sealed class FiltrationService : BackgroundService
             try
             {
                 if (_filtration.Mode == FilterMode.Auto && _filtration.NeedsRebuild())
-                    _filtration.BuildSchedule(_state.WaterTempC, _filtration.TargetFreqHz);
+                {
+                    // Le planning quotidien doit être basé sur la fréquence NOMINALE,
+                    // pas sur la fréquence ORP instantanée (_filtration.TargetFreqHz).
+                    // Sinon, un redémarrage du service en pleine journée — ou même
+                    // un simple cycle SensorService qui modifie TargetFreqHz avant
+                    // ce rebuild — fait varier le nombre d'heures total calculé,
+                    // ce qui peut tronquer le créneau en cours et arrêter la pompe
+                    // bien avant l'heure de fin prévue.
+                    var schedule = _filtration.BuildSchedule(_state.WaterTempC, _cfg.FreqNominal);
+                    _logger.LogInformation("Planning filtration reconstruit ({Count} créneau(x)): {Slots}",
+                        schedule.Count,
+                        string.Join(", ", schedule.Select(s => $"[{s.Start:F1}-{s.End:F1}]")));
+                }
 
                 bool shouldRun = _filtration.ShouldPumpRun();
                 double targetFreq = _filtration.GetRunFreq();
@@ -59,10 +71,8 @@ public sealed class FiltrationService : BackgroundService
             {
                 _logger.LogError(ex, "FiltrationService: erreur boucle");
             }
-
             await Task.Delay(TimeSpan.FromSeconds(5), ct).ConfigureAwait(false);
         }
-
         if (_drive.IsRunning)
         {
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
