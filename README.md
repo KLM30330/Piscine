@@ -88,3 +88,20 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now piscine-controller
 sudo journalctl -u piscine-controller -f
 ```
+
+### Mettre à jour :
+```bash
+# 1. Arrêter le service
+sudo systemctl stop piscine
+
+# 2. Remplacer le binaire (adapte les chemins)
+cp /home/pi/Downloads/PiscineController /home/pi/pool/PiscineController
+chmod +x /home/pi/pool/PiscineController
+
+# 3. Redémarrer le service
+sudo systemctl start piscine
+
+# 4. Vérifier
+sudo systemctl status piscine
+sudo journalctl -u piscine -f
+```
