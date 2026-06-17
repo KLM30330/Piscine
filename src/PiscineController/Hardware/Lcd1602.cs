@@ -7,7 +7,10 @@ namespace PiscineController.Hardware;
 public sealed class Lcd1602 : IDisposable
 {
     private readonly I2cDevice _device;
-    private bool _backlight = true;
+
+    // Écran éteint au démarrage : pas de rétroéclairage avant le premier
+    // Show() explicite (cf. DisplayService). Initialize() respecte cet état.
+    private bool _backlight = false;
 
     private const byte LCD_BACKLIGHT = 0x08;
     private const byte ENABLE = 0x04;
@@ -44,6 +47,10 @@ public sealed class Lcd1602 : IDisposable
         SendCommand(0x01); // effacement
 
         Thread.Sleep(2);
+
+        // Écran éteint au démarrage (rétroéclairage uniquement, le contrôleur
+        // HD44780 reste initialisé) : visible seulement au premier Show().
+        SetBacklight(false);
     }
 
     public void Clear()
