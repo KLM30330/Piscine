@@ -32,22 +32,26 @@ public sealed class Wk600Drive : IDisposable
     private const ushort CMD_STOP_RAMP     = 0x0006; // Arrêt sur rampe
     private const ushort CMD_FAULT_RESET   = 0x0007; // Reset défaut
 
-    // ── Registres de lecture (FC03) — groupe U0 base 0x7000 ──────────────────
-    // U0-00 0x7000 : Fréquence sortie     × 0.01 Hz
-    // U0-01 0x7001 : Courant sortie       × 0.1 A
-    // U0-02 0x7002 : Tension sortie       × 1 V
-    // U0-03 0x7003 : Tension bus DC       × 1 V
-    // U0-04 0x7004 : Vitesse moteur       × 1 RPM
-    // U0-05 0x7005 : Puissance sortie     × 0.1 kW
-    // U0-06 0x7006 : Couple sortie        × 0.1 %
-    // U0-07 0x7007 : Température          × 1 °C
-    // U0-08 0x7008 : Mot d'état
-    //   bit 0 : en marche
-    //   bit 1 : sens avant
-    //   bit 2 : sens arrière
-    //   bit 3 : défaut
-    //   bit 4 : alarme
-    // U0-09 0x7009 : Code défaut actuel
+    // ── Registres de lecture (FC03) — mapping confirmé via manuel constructeur ──
+    // Bloc A : 0x7000-0x7006 (7 registres)
+    //   U0-00 0x7000 : Running frequency      × 0.01 Hz
+    //   U0-01 0x7001 : Set frequency           × 0.01 Hz   (consigne, PAS le courant)
+    //   U0-02 0x7002 : Bus voltage             × 0.1 V     (PAS la tension de sortie)
+    //   U0-03 0x7003 : Output voltage          × 1 V
+    //   U0-04 0x7004 : Output current          × 0.01 A    (PAS × 0.1 !)
+    //   U0-05 0x7005 : Output power             × 0.1 kW
+    //   U0-06 0x7006 : Output torque            × 0.1 %
+    //
+    // Bloc B : 0x703D-0x703E (2 registres)
+    //   U0-61 0x703D : AC drive running state   0=arrêté, 1=en marche (valeur simple, pas des bits)
+    //   U0-62 0x703E : Current fault code        valeur directe
+    //
+    // Registre isolé : 0x7022
+    //   U0-34 0x7022 : Motor temperature         × 1 °C
+    //
+    // ⚠️ 0x7007/0x7008 ne sont PAS des températures ni un mot d'état marche/arrêt :
+    // ce sont respectivement l'état des entrées (X state) et des sorties (DO state)
+    // numériques du variateur. L'ancien code les utilisait par erreur.
 
     public Wk600Drive(PoolConfig cfg, ILogger<Wk600Drive> logger)
     {
@@ -152,8 +156,6 @@ public sealed class Wk600Drive : IDisposable
     }
 
     // ── Consigne fréquence ───────────────────────────────────────────────────
-    // Le registre 0x1000 attend un pourcentage de la fréquence max × 100
-    // Exemple : 25 Hz sur base 50 Hz → 50.00% → valeur 5000
     private void SetFreqRaw(double hz)
     {
         double clamped = Math.Clamp(hz, _cfg.FreqMinAbsolute, _cfg.FreqNominal);
@@ -232,39 +234,45 @@ public sealed class Wk600Drive : IDisposable
     // ── Reset défaut ──────────────────────────────────────────────────────────
     public void FaultReset() => WriteRegister(REG_COMMAND, CMD_FAULT_RESET);
 
-    // ── Lecture état complet (U0-00 à U0-65, 66 registres) ───────────────────
+    // ── Lecture état complet ────────────────────────────────────────────────
     public DriveStatusSnapshot ReadStatus()
     {
-        var m = ReadHoldingRegisters(0x7000, 65);
-        if (m == null)
+        // Bloc A : fréquence / tensions / courant / puissance / couple
+        var a = ReadHoldingRegisters(0x7000, 7);   // 0x7000 → 0x7006
+        // Bloc B : état marche/arrêt + code défaut
+        var b = ReadHoldingRegisters(0x703D, 2);   // 0x703D → 0x703E
+        // Registre isolé : température moteur
+        var t = ReadHoldingRegisters(0x7022, 1);
+
+        if (a == null || b == null)
         {
             _logger.LogWarning("WK600-D ReadStatus : pas de réponse");
             return new DriveStatusSnapshot { IsRunning = _running, SetpointHz = _currentFreq };
         }
 
-        ushort sw       = m[8];
-        bool isRunning  = (sw & (1 << 0)) != 0;
-        bool isFault    = (sw & (1 << 3)) != 0;
-        bool atSetpoint = (sw & (1 << 7)) != 0;
-        int faultCode   = m[9];
+        bool isRunning = b[0] == 1;          // U0-61 : valeur simple 0/1, pas des bits
+        int faultCode  = b[1];               // U0-62
+        bool isFault   = faultCode != 0;
+        double tempC   = t != null ? t[0] : 0.0;  // U0-34, absente si la lecture a échoué
+
         _running = isRunning;
 
         return new DriveStatusSnapshot
         {
-            OutFreqHz   = m[0] * 0.01,       // U0-00 : fréquence sortie  (0.01 Hz)
-            DcBusV      = m[2],              // U0-02 : tension bus DC    (1 V)
-            OutVoltageV = m[3],              // U0-03 : tension sortie    (1 V)
-            OutCurrentA = m[4] * 0.1,        // U0-04 : courant sortie    (0.1 A)
-            OutPowerKw  = m[5] * 10,         // U0-05 : puissance sortie  (0.1 W)
-            //MotorRpm    = m[4],            // U0-0? : vitesse moteur    (1 RPM)
-            //OutTorquePct= m[6] * 0.1,      // U0-0? : couple sortie     (0.1 %)
-            //DriveTempC  = m[7],            // U0-0? : température       (1 °C)
-            IsRunning   = isRunning,
-            IsFault     = isFault,
-            AtSetpoint  = atSetpoint,
-            FaultCode   = m[62],         // U0-09 : code défaut
-            FaultLabel  = FaultLabels.TryGetValue(faultCode, out var lbl) ? lbl : $"Code {faultCode}",
-            SetpointHz  = _currentFreq,
+            OutFreqHz    = a[0] * 0.01,   // U0-00 : fréquence sortie   (0.01 Hz)
+            SetpointFreqHz = a[1] * 0.01, // U0-01 : fréquence consigne (0.01 Hz)
+            DcBusV       = a[2] * 0.1,    // U0-02 : tension bus DC     (0.1 V)
+            OutVoltageV  = a[3],           // U0-03 : tension sortie     (1 V)
+            OutCurrentA  = a[4] * 0.01,   // U0-04 : courant sortie     (0.01 A)
+            OutPowerKw   = a[5] * 10,    // U0-05 : puissance sortie   (0.1 kW)
+            //OutTorquePct = a[6] * 0.1,    // U0-06 : couple sortie      (0.1 %)
+            DriveTempC   = tempC,          // U0-34 : température moteur (1 °C)
+            IsRunning    = isRunning,       // U0-61
+            IsFault      = isFault,
+            AtSetpoint   = Math.Abs(a[0] * 0.01 - _currentFreq) < 0.5,
+            FaultCode    = faultCode,       // U0-62
+            FaultLabel   = FaultLabels.TryGetValue(faultCode, out var lbl) ? lbl : $"Code {faultCode}",
+            SetpointHz   = _currentFreq,
         };
     }
 
@@ -276,20 +284,20 @@ public sealed class Wk600Drive : IDisposable
 
 public sealed class DriveStatusSnapshot
 {
-    public double OutFreqHz    { get; init; }
-    public double OutCurrentA  { get; init; }
-    public double OutVoltageV  { get; init; }
-    public double DcBusV       { get; init; }
-    public int    MotorRpm     { get; init; }
-    public double OutPowerKw   { get; init; }
-    public double OutTorquePct { get; init; }
-    public double DriveTempC   { get; init; }
-    public bool   IsRunning    { get; init; }
-    public bool   IsFault      { get; init; }
-    public bool   AtSetpoint   { get; init; }
-    public int    FaultCode    { get; init; }
-    public string FaultLabel   { get; init; } = "Aucun";
-    public double SetpointHz   { get; init; }
-    // Compatibilité DriveService
-    public int    RunTimeH     { get; init; }
+    public double OutFreqHz       { get; init; }
+    public double SetpointFreqHz  { get; init; }
+    public double OutCurrentA     { get; init; }
+    public double OutVoltageV     { get; init; }
+    public double DcBusV          { get; init; }
+    public int    MotorRpm        { get; init; }
+    public double OutPowerKw      { get; init; }
+    public double OutTorquePct    { get; init; }
+    public double DriveTempC      { get; init; }
+    public bool   IsRunning       { get; init; }
+    public bool   IsFault         { get; init; }
+    public bool   AtSetpoint      { get; init; }
+    public int    FaultCode       { get; init; }
+    public string FaultLabel      { get; init; } = "Aucun";
+    public double SetpointHz      { get; init; }
+    public int    RunTimeH        { get; init; }
 }
