@@ -6,13 +6,20 @@ namespace PiscineController.Hardware;
 
 public sealed class Wk600Drive : IDisposable
 {
-    private readonly SerialPort _port;
+    private SerialPort _port;
     private readonly byte _slaveId;
     private readonly PoolConfig _cfg;
     private readonly ILogger<Wk600Drive> _logger;
     private double _currentFreq;
     private bool _running;
     private readonly object _lock = new();
+
+    // Après ce nombre d'échecs consécutifs (timeout) sur le port série, on
+    // suppose le port physiquement désynchronisé (observé en production :
+    // le port reste bloqué indéfiniment jusqu'à fermeture/réouverture, même
+    // après DiscardInBuffer) et on le referme/rouvre automatiquement.
+    private const int MaxConsecutiveFailuresBeforeReset = 5;
+    private int _consecutiveFailures;
 
     private static readonly Dictionary<int, string> FaultLabels = new()
     {
@@ -58,15 +65,56 @@ public sealed class Wk600Drive : IDisposable
         _cfg = cfg;
         _logger = logger;
         _slaveId = (byte)cfg.ModbusSlaveId;
-        _port = new SerialPort(cfg.ModbusPort, cfg.ModbusBaudrate, Parity.None, 8, StopBits.One)
+        _port = OpenPort();
+    }
+
+    private SerialPort OpenPort()
+    {
+        var port = new SerialPort(_cfg.ModbusPort, _cfg.ModbusBaudrate, Parity.None, 8, StopBits.One)
         {
             ReadTimeout  = 1000,
             WriteTimeout = 1000,
             RtsEnable    = true,
         };
-        _port.Open();
-        _logger.LogInformation("WK600-D ouvert sur {Port} à {Baud} baud", cfg.ModbusPort, cfg.ModbusBaudrate);
+        port.Open();
+        _logger.LogInformation("WK600-D ouvert sur {Port} à {Baud} baud", _cfg.ModbusPort, _cfg.ModbusBaudrate);
+        return port;
     }
+
+    // Ferme et rouvre le port physiquement. Observé en production : après une
+    // série de timeouts consécutifs, ni DiscardInBuffer() ni de simples délais
+    // supplémentaires ne suffisent à débloquer la communication — seule une
+    // fermeture/réouverture du port résout la situation (constaté après un
+    // redémarrage complet du process, qui rouvre implicitement le port).
+    private void ResetPort()
+    {
+        lock (_lock)
+        {
+            _logger.LogWarning("WK600-D: {Count} échecs consécutifs, réinitialisation du port série...",
+                _consecutiveFailures);
+            try { _port.Close(); _port.Dispose(); } catch { /* best-effort */ }
+
+            try
+            {
+                _port = OpenPort();
+                _consecutiveFailures = 0;
+                _logger.LogInformation("WK600-D: port série réinitialisé avec succès");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "WK600-D: échec de la réinitialisation du port série");
+            }
+        }
+    }
+
+    private void RecordFailure()
+    {
+        int count = Interlocked.Increment(ref _consecutiveFailures);
+        if (count >= MaxConsecutiveFailuresBeforeReset)
+            ResetPort();
+    }
+
+    private void RecordSuccess() => Interlocked.Exchange(ref _consecutiveFailures, 0);
 
     public bool IsRunning     => _running;
     public double CurrentFreq => _currentFreq;
@@ -111,6 +159,7 @@ public sealed class Wk600Drive : IDisposable
                 _logger.LogWarning("WK600-D WriteRegister timeout addr=0x{Addr:X4} value={Value} " +
                                    "({Read}/8 octets reçus)", addr, value, read);
                 _port.DiscardInBuffer();
+                RecordFailure();
                 return false;
             }
 
@@ -122,7 +171,9 @@ public sealed class Wk600Drive : IDisposable
                 return false;
             }
 
-            return resp[0] == _slaveId && resp[1] == 0x06;
+            bool ok = resp[0] == _slaveId && resp[1] == 0x06;
+            if (ok) RecordSuccess();
+            return ok;
         }
     }
 
@@ -154,6 +205,7 @@ public sealed class Wk600Drive : IDisposable
                 _logger.LogWarning("WK600-D ReadHoldingRegisters timeout addr=0x{Addr:X4} " +
                                    "({Read}/{Expected} octets reçus)", addr, read, expected);
                 _port.DiscardInBuffer();   // évite de polluer la prochaine requête
+                RecordFailure();
                 return null;
             }
 
@@ -171,6 +223,7 @@ public sealed class Wk600Drive : IDisposable
             var regs = new ushort[count];
             for (int i = 0; i < count; i++)
                 regs[i] = (ushort)((resp[3 + i * 2] << 8) | resp[4 + i * 2]);
+            RecordSuccess();
             return regs;
         }
     }
@@ -328,8 +381,8 @@ public sealed class Wk600Drive : IDisposable
             SetpointFreqHz = a[1] * 0.01, // U0-01 : fréquence consigne (0.01 Hz)
             DcBusV       = a[2] * 0.1,    // U0-02 : tension bus DC     (0.1 V)
             OutVoltageV  = a[3],           // U0-03 : tension sortie     (1 V)
-            OutCurrentA  = a[4] * 0.01,   // U0-04 : courant sortie     (0.01 A)
-            OutPowerKw   = a[5] * 0.1,    // U0-05 : puissance sortie   (0.1 kW)
+            OutCurrentA  = a[4] * 0.1,   // U0-04 : courant sortie     (0.01 A)
+            OutPowerKw   = a[5] * 10,    // U0-05 : puissance sortie   (0.1 kW)
             OutTorquePct = a[6] * 0.1,    // U0-06 : couple sortie      (0.1 %)
             DriveTempC   = tempC,          // U0-34 : température moteur (1 °C)
             IsRunning    = isRunning,       // U0-61
