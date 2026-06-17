@@ -12,8 +12,15 @@ public sealed class ElectrolyzerService : BackgroundService
     private readonly MqttService _mqtt;
     private readonly string _mqttPrefix;
     private readonly ILogger<ElectrolyzerService> _logger;
-    private bool _electrolyzerOn;
-    private bool _lastPublished;   // évite les publications inutiles
+    // Pas de commande d'activation séparée pour l'électrolyseur : son
+    // fonctionnement dépend uniquement de l'engagement du relais PCF8574,
+    // lui-même verrouillé sur l'état réel de la pompe (cf. Apply()). On
+    // active donc la consigne par défaut pour que le relais s'engage dès
+    // que la pompe tourne. SetElectrolyzer() reste disponible si vous
+    // voulez ajouter plus tard une coupure manuelle (ex. hivernage).
+    private bool _electrolyzerOn = true;
+    private bool? _lastActive;   // null = jamais publié, force le premier envoi
+    private bool? _lastEnabled;  // idem, suivi indépendant de "enabled"
 
     public ElectrolyzerService(PoolState state, Pcf8574 relay,
         MqttService mqtt, PiscineController.Config.PoolConfig cfg,
@@ -21,7 +28,6 @@ public sealed class ElectrolyzerService : BackgroundService
     {
         _state = state; _relay = relay;
         _mqtt = mqtt; _mqttPrefix = cfg.MqttPrefix; _logger = logger;
-        _lastPublished = false;
     }
 
     public void SetElectrolyzer(bool on)
@@ -71,8 +77,17 @@ public sealed class ElectrolyzerService : BackgroundService
     private async Task PublishStateAsync(CancellationToken ct)
     {
         bool active = _state.ElectrolyzerRunning;
-        if (active == _lastPublished) return;   // pas de changement, rien à publier
-        _lastPublished = active;
+        bool enabled = _electrolyzerOn;
+
+        // _lastActive/_lastEnabled valent null avant le tout premier appel :
+        // la comparaison bool? vs bool échoue alors systématiquement (null
+        // n'égale jamais false ni true), donc le premier publish a TOUJOURS
+        // lieu — contrairement à l'ancien bool initialisé à false, qui
+        // coïncidait avec le premier état "false" et bloquait silencieusement
+        // toute publication dès le départ.
+        if (_lastActive == active && _lastEnabled == enabled) return;
+        _lastActive = active;
+        _lastEnabled = enabled;
 
         // État réel du relais (ON/OFF pour HA)
         await _mqtt.PublishAsync(
@@ -83,10 +98,10 @@ public sealed class ElectrolyzerService : BackgroundService
         // Consigne (ce que l'utilisateur a demandé, indépendant de la pompe)
         await _mqtt.PublishAsync(
             $"{_mqttPrefix}/electrolyzer/enabled",
-            _electrolyzerOn ? "ON" : "OFF",
+            enabled ? "ON" : "OFF",
             retain: true, ct: ct);
 
         _logger.LogInformation("Électrolyseur: {State} (consigne={Enabled}, pompe={Pump})",
-            active ? "ON" : "OFF", _electrolyzerOn, _state.PumpRunning);
+            active ? "ON" : "OFF", enabled, _state.PumpRunning);
     }
 }
