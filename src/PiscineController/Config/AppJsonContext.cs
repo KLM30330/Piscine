@@ -13,7 +13,8 @@ internal partial class AppJsonContext : JsonSerializerContext { }
 
 public sealed record SensorPayload(
     double PhValue, double OrpMv, double WaterTempC,
-    string WaterState, double TargetFreqHz, bool OrpAlarm);
+    string WaterState, double TargetFreqHz, bool OrpAlarm,
+    double PhDoseTotalMl, bool PhAlarmLow);
 
 public sealed record DriveStatusPayload(
     double OutFreqHz, double OutCurrentA, double OutVoltageV,
