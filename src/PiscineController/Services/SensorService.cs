@@ -34,6 +34,7 @@ public sealed class SensorService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken ct)
     {
+        _logger.LogInformation("SensorService: démarrage de la boucle de lecture");
         while (!ct.IsCancellationRequested)
         {
             try { await ReadAndPublish(ct); }
@@ -54,6 +55,8 @@ public sealed class SensorService : BackgroundService
 
         double? phVal = _ph.Read();
         double? orpMv = _orp.Read();
+        _logger.LogInformation("SensorService cycle: temp={Temp} ph={Ph} orp={Orp} pumpRunning={Pump}",
+            tempC, phVal, orpMv, _state.PumpRunning);
         if (phVal.HasValue) _state.PhValue = phVal.Value;
         if (orpMv.HasValue) _state.OrpMv = orpMv.Value;
 
