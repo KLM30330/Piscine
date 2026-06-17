@@ -94,9 +94,15 @@ public sealed class EzoPmp : AtlasEzoBase
     public EzoPmp(int busId, int address, ILogger<EzoPmp> logger)
         : base(busId, address, logger) { }
 
+    // Durée estimée (ms) pour un dosage de volumeMl, y compris la marge de
+    // sécurité de la pompe péristaltique. Public pour permettre à l'appelant
+    // (ex. ButtonService) d'afficher un chrono sans dupliquer cette formule.
+    public static int EstimateDoseMs(double volumeMl) =>
+        (int)(volumeMl / 20.0 * 1000) + 2000;
+
     public void Dose(double volumeMl)
     {
-        int delayMs = (int)(volumeMl / 20.0 * 1000) + 2000;
+        int delayMs = EstimateDoseMs(volumeMl);
         SendCommand($"D,{volumeMl.ToString(System.Globalization.CultureInfo.InvariantCulture)}", delayMs);
     }
 
