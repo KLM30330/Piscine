@@ -232,10 +232,10 @@ public sealed class Wk600Drive : IDisposable
     // ── Reset défaut ──────────────────────────────────────────────────────────
     public void FaultReset() => WriteRegister(REG_COMMAND, CMD_FAULT_RESET);
 
-    // ── Lecture état complet (U0-00 à U0-09, 10 registres) ───────────────────
+    // ── Lecture état complet (U0-00 à U0-65, 66 registres) ───────────────────
     public DriveStatusSnapshot ReadStatus()
     {
-        var m = ReadHoldingRegisters(0x7000, 10);
+        var m = ReadHoldingRegisters(0x7000, 65);
         if (m == null)
         {
             _logger.LogWarning("WK600-D ReadStatus : pas de réponse");
@@ -251,18 +251,18 @@ public sealed class Wk600Drive : IDisposable
 
         return new DriveStatusSnapshot
         {
-            OutFreqHz   = m[0] * 0.01,   // U0-00 : fréquence sortie  (0.01 Hz)
-            DcBusV      = m[2],          // U0-02 : tension bus DC    (1 V)
-            OutVoltageV = m[3],          // U0-03 : tension sortie    (1 V)
-            OutCurrentA = m[4] * 0.1,    // U0-04 : courant sortie    (0.1 A)
-            OutPowerKw  = m[5] * 10,    // U0-05 : puissance sortie  (0.1 kW)
-            //MotorRpm    = m[4],           // U0-0? : vitesse moteur    (1 RPM)
-            //OutTorquePct= m[6] * 0.1,    // U0-0? : couple sortie     (0.1 %)
-            //DriveTempC  = m[7],           // U0-0? : température       (1 °C)
+            OutFreqHz   = m[0] * 0.01,       // U0-00 : fréquence sortie  (0.01 Hz)
+            DcBusV      = m[2],              // U0-02 : tension bus DC    (1 V)
+            OutVoltageV = m[3],              // U0-03 : tension sortie    (1 V)
+            OutCurrentA = m[4] * 0.1,        // U0-04 : courant sortie    (0.1 A)
+            OutPowerKw  = m[5] * 10,         // U0-05 : puissance sortie  (0.1 W)
+            //MotorRpm    = m[4],            // U0-0? : vitesse moteur    (1 RPM)
+            //OutTorquePct= m[6] * 0.1,      // U0-0? : couple sortie     (0.1 %)
+            //DriveTempC  = m[7],            // U0-0? : température       (1 °C)
             IsRunning   = isRunning,
             IsFault     = isFault,
             AtSetpoint  = atSetpoint,
-            FaultCode   = faultCode,      // U0-09 : code défaut
+            FaultCode   = m[62],         // U0-09 : code défaut
             FaultLabel  = FaultLabels.TryGetValue(faultCode, out var lbl) ? lbl : $"Code {faultCode}",
             SetpointHz  = _currentFreq,
         };
