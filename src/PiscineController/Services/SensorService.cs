@@ -39,7 +39,6 @@ public sealed class SensorService : BackgroundService
             try { await ReadAndPublish(ct); }
             catch (Exception ex) when (!ct.IsCancellationRequested)
             { _logger.LogError(ex, "SensorService: erreur lecture capteurs"); }
-
             await Task.Delay(TimeSpan.FromSeconds(60), ct).ConfigureAwait(false);
         }
     }
@@ -55,9 +54,18 @@ public sealed class SensorService : BackgroundService
 
         double? phVal = _ph.Read();
         double? orpMv = _orp.Read();
-
         if (phVal.HasValue) _state.PhValue = phVal.Value;
         if (orpMv.HasValue) _state.OrpMv = orpMv.Value;
+
+        // ── Alarme pH bas ────────────────────────────────────────────────────
+        // Le PID ne corrige que les pH trop hauts (dosage acide uniquement).
+        // Un pH trop bas n'est jamais corrigé automatiquement : on le signale.
+        bool phAlarmLow = phVal.HasValue
+            && (_cfg.PhTarget - phVal.Value) > _cfg.PhDeadband;
+
+        if (phAlarmLow)
+            _logger.LogWarning("Alarme pH bas: {Ph:F2} (cible {Target:F2})",
+                phVal!.Value, _cfg.PhTarget);
 
         if (phVal.HasValue)
         {
@@ -83,7 +91,9 @@ public sealed class SensorService : BackgroundService
             WaterTempC: tempC ?? _state.WaterTempC,
             WaterState: _filtration.WaterState.ToString(),
             TargetFreqHz: _filtration.TargetFreqHz,
-            OrpAlarm: _filtration.WaterState is WaterState.CriticalLow or WaterState.Overdose);
+            OrpAlarm: _filtration.WaterState is WaterState.CriticalLow or WaterState.Overdose,
+            PhDoseTotalMl: _pid.TotalMl,
+            PhAlarmLow: phAlarmLow);
 
         await _mqtt.PublishAsync(
             $"{_cfg.MqttPrefix}/sensors",
