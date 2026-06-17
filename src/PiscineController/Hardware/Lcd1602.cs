@@ -24,22 +24,26 @@ public sealed class Lcd1602 : IDisposable
 
     public void Initialize()
     {
-        Thread.Sleep(50);
+        // 50ms était proche du minimum datasheet (~15-40ms après Vcc stable) ;
+        // certains clones PCF8574 bon marché ont besoin de plus de marge pour
+        // être fiables, d'où le passage à 100ms.
+        Thread.Sleep(100);
         Init();
     }
 
     private void Init()
     {
         WriteFourBits(0x03);
-        Thread.Sleep(5);
+        Thread.Sleep(10);
 
         WriteFourBits(0x03);
-        Thread.Sleep(1);
+        Thread.Sleep(2);
 
         WriteFourBits(0x03);
-        Thread.Sleep(1);
+        Thread.Sleep(2);
 
         WriteFourBits(0x02);
+        Thread.Sleep(2);
 
         SendCommand(0x28); // 4 bits, 2 lignes
         SendCommand(0x0C); // affichage ON, curseur OFF
@@ -74,7 +78,14 @@ public sealed class Lcd1602 : IDisposable
             SendChar(c switch
             {
                 '°' => 0xDF, // symbole degré HD44780
-                _ => (byte)(c <= 255 ? c : '?')
+                // La table de caractères CGROM du HD44780 ne correspond PAS à
+                // Latin-1/Unicode au-delà de l'ASCII imprimable (0x20-0x7E) :
+                // les codes 0x80-0xFF y affichent des katakana japonais ou des
+                // symboles arbitraires, pas des lettres accentuées. On ne
+                // laisse donc passer que l'ASCII imprimable, tout le reste
+                // (y compris tout caractère Latin-1 qui aurait échappé à
+                // NormalizeText) devient '?' plutôt qu'un octet brut.
+                _ => (byte)(c is >= ' ' and <= '~' ? c : '?')
             });
         }
     }
@@ -138,9 +149,10 @@ public sealed class Lcd1602 : IDisposable
         byte bl = _backlight ? LCD_BACKLIGHT : (byte)0;
 
         _device.WriteByte((byte)(val | bl | ENABLE));
-        Thread.Sleep(1);
+        Thread.Sleep(2);
 
         _device.WriteByte((byte)((val | bl) & ~ENABLE));
+        Thread.Sleep(1);
     }
 
     public void Dispose()
