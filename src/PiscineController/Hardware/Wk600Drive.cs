@@ -101,8 +101,18 @@ public sealed class Wk600Drive : IDisposable
 
             byte[] resp = new byte[8];
             int read = 0;
-            while (read < 8)
-                read += _port.Read(resp, read, 8 - read);
+            try
+            {
+                while (read < 8)
+                    read += _port.Read(resp, read, 8 - read);
+            }
+            catch (TimeoutException)
+            {
+                _logger.LogWarning("WK600-D WriteRegister timeout addr=0x{Addr:X4} value={Value} " +
+                                   "({Read}/8 octets reçus)", addr, value, read);
+                _port.DiscardInBuffer();
+                return false;
+            }
 
             ushort respCrc = Crc16(resp.AsSpan(0, 6));
             ushort gotCrc  = (ushort)(resp[6] | (resp[7] << 8));
@@ -184,7 +194,16 @@ public sealed class Wk600Drive : IDisposable
             _cfg.FreqStartMin);
 
         SetFreqRaw(_cfg.FreqStartMin);
-        WriteRegister(REG_COMMAND, CMD_FORWARD);
+        await Task.Delay(InterRequestDelayMs, ct).ConfigureAwait(false);
+
+        bool started = WriteRegister(REG_COMMAND, CMD_FORWARD);
+        if (!started)
+        {
+            _logger.LogWarning("WK600-D: échec envoi commande FORWARD, démarrage abandonné " +
+                               "pour cette tentative (retry au prochain cycle)");
+            return;   // _running reste false, FiltrationService retentera au cycle suivant
+        }
+
         _running     = true;
         _currentFreq = _cfg.FreqStartMin;
 
@@ -309,8 +328,8 @@ public sealed class Wk600Drive : IDisposable
             SetpointFreqHz = a[1] * 0.01, // U0-01 : fréquence consigne (0.01 Hz)
             DcBusV       = a[2] * 0.1,    // U0-02 : tension bus DC     (0.1 V)
             OutVoltageV  = a[3],           // U0-03 : tension sortie     (1 V)
-            OutCurrentA  = a[4] * 0.1,   // U0-04 : courant sortie     (0.01 A)
-            OutPowerKw   = a[5] * 10,    // U0-05 : puissance sortie   (0.1 kW)
+            OutCurrentA  = a[4] * 0.01,   // U0-04 : courant sortie     (0.01 A)
+            OutPowerKw   = a[5] * 0.1,    // U0-05 : puissance sortie   (0.1 kW)
             OutTorquePct = a[6] * 0.1,    // U0-06 : couple sortie      (0.1 %)
             DriveTempC   = tempC,          // U0-34 : température moteur (1 °C)
             IsRunning    = isRunning,       // U0-61
