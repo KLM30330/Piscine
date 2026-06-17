@@ -192,7 +192,7 @@ public sealed class MqttService : BackgroundService
         await Sensor("pump_freq",        "Fréquence pompe",       "OutFreqHz",   "Hz",  "frequency",   "drive");
         await Sensor("pump_current",     "Courant pompe",         "OutCurrentA", "A",   "current",     "drive");
         await Sensor("pump_voltage",     "Tension pompe",         "OutVoltageV", "V",   "voltage",     "drive");
-        await Sensor("pump_power",       "Puissance pompe",       "OutPowerKw",  "kW",  "power",       "drive");
+        await Sensor("pump_power",       "Puissance pompe",       "OutPowerKw",  "W",  "power",       "drive");
         // await Sensor("pump_temp",        "Température variateur", "DriveTempC",  "°C",  "temperature", "drive");
         await Sensor("pump_setpoint",    "Consigne fréquence",    "SetpointHz",  "Hz",  "frequency",   "drive");
         await Sensor("pump_fault_code",  "Code défaut variateur", "FaultCode",   "",    null,          "drive");
