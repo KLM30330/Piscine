@@ -3,6 +3,7 @@ using PiscineController.Config;
 
 namespace PiscineController.Config;
 
+[JsonSourceGenerationOptions(DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
 [JsonSerializable(typeof(SensorPayload))]
 [JsonSerializable(typeof(DriveStatusPayload))]
 [JsonSerializable(typeof(HaDiscoveryPayload))]
