@@ -161,13 +161,19 @@ public sealed class MqttService : BackgroundService
             [$"{_cfg.MqttPrefix}_controller"],
             "Piscine", "RPi3B+ / Atlas Scientific / WK600-D", "DIY");
 
-        async Task Sensor(string id, string name, string stateKey,
+        async Task Sensor(string id, string name, string? stateKey,
                           string unit, string? devClass,
-                          string stateTopic = "sensors")
+                          string stateTopic = "sensors", string? topicOverride = null)
         {
+            // stateKey = null → topic en texte brut, pas de JSON (ex. pump_temp,
+            // publié tel quel par PumpTempService) : pas de value_template,
+            // HA utilise directement le payload comme état du capteur.
+            string topic = topicOverride ?? $"{dev}/{stateTopic}";
+            string? template = stateKey != null ? $"{{{{ value_json.{stateKey} }}}}" : null;
+
             var p = new HaDiscoveryPayload(
-                name, $"{dev}_{id}", $"{dev}/{stateTopic}",
-                null, $"{{{{ value_json.{stateKey} }}}}", unit, devClass, device);
+                name, $"{dev}_{id}", topic,
+                null, template, unit, devClass, device);
             await PublishAsync(
                 $"{_cfg.MqttHaDisc}/sensor/{dev}/{id}/config",
                 JsonSerializer.Serialize(p, AppJsonContext.Default.HaDiscoveryPayload),
@@ -262,6 +268,12 @@ public sealed class MqttService : BackgroundService
         await Sensor("pump_setpoint",    "Consigne fréquence",    "SetpointHz",  "Hz",  "frequency",   "drive");
         await Sensor("pump_fault_code",  "Code défaut variateur", "FaultCode",   "",    null,          "drive");
         await Sensor("pump_fault_label", "Libellé défaut",        "FaultLabel",  "",    null,          "drive");
+
+        // ── Température pompe (sonde DS18B20 one-wire, topic dédié
+        // {prefix}/pump_temp déjà publié en texte brut par PumpTempService —
+        // pas de JSON ici, contrairement aux capteurs ci-dessus) ──────────────
+        await Sensor("pump_temp", "Température pompe", null, "°C", "temperature",
+            topicOverride: $"{dev}/pump_temp");
 
         // ── Capteurs binaires variateur (topic: {prefix}/drive) ───────────────
         await BinarySensor("pump_running",     "Pompe en marche",  "IsRunning",  "running");
