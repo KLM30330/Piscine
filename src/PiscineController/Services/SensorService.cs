@@ -96,7 +96,9 @@ public sealed class SensorService : BackgroundService
             TargetFreqHz: _filtration.TargetFreqHz,
             OrpAlarm: _filtration.WaterState is WaterState.CriticalLow or WaterState.Overdose,
             PhDoseTotalMl: _pid.TotalMl,
-            PhAlarmLow: phAlarmLow);
+            PhAlarmLow: phAlarmLow,
+            FilterMode: _filtration.Mode.ToString(),
+            PumpForcedFreqHz: _filtration.ForcedFreqHz);
 
         await _mqtt.PublishAsync(
             $"{_cfg.MqttPrefix}/sensors",
