@@ -1,48 +1,67 @@
-using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using PiscineController.Config;
 using PiscineController.Hardware;
 
 namespace PiscineController.Services;
 
-public sealed class PumpTempService : BackgroundService
+// Logique d'amorçage de la pompe doseuse (chrono + dosage), partagée entre
+// ButtonService (bouton physique) et MqttService (commande HA), avec un seul
+// verrou anti-double-déclenchement commun aux deux déclencheurs : sans ce
+// partage, un appui bouton et une commande MQTT simultanés pourraient lancer
+// deux dosages en parallèle.
+public sealed class PumpPrimingService
 {
-    private readonly PoolConfig _cfg;
-    private readonly PoolState _state;
-    private readonly Ds18b20 _sensor;
-    private readonly MqttService _mqtt;
-    private readonly ILogger<PumpTempService> _logger;
+    private readonly EzoPmp _pmp;
+    private readonly DisplayService _display;
+    private readonly ILogger<PumpPrimingService> _logger;
+    private int _priming;
 
-    public PumpTempService(PoolConfig cfg, PoolState state,
-        Ds18b20 sensor, MqttService mqtt, ILogger<PumpTempService> logger)
+    public PumpPrimingService(EzoPmp pmp, DisplayService display, ILogger<PumpPrimingService> logger)
     {
-        _cfg = cfg; _state = state; _sensor = sensor; _mqtt = mqtt; _logger = logger;
+        _pmp = pmp; _display = display; _logger = logger;
     }
 
-    protected override async Task ExecuteAsync(CancellationToken ct)
+    // Retourne false si un amorçage est déjà en cours (appel ignoré).
+    public bool TryPrime(double volumeMl)
     {
-        while (!ct.IsCancellationRequested)
+        if (Interlocked.CompareExchange(ref _priming, 1, 0) != 0)
         {
-            try
+            _logger.LogDebug("Amorçage déjà en cours, demande ignorée");
+            return false;
+        }
+        _logger.LogInformation("Amorçage pompe doseuse {Vol} mL", volumeMl);
+        _ = RunAsync(volumeMl);
+        return true;
+    }
+
+    // Affiche un chrono pendant toute la durée réelle du dosage (au lieu
+    // d'un texte statique), conformément au README : "affichage LCD
+    // 'amorçage ph- ' + chrono".
+    private async Task RunAsync(double volumeMl)
+    {
+        try
+        {
+            int totalMs = EzoPmp.EstimateDoseMs(volumeMl);
+            int totalSeconds = Math.Max(1, (int)Math.Ceiling(totalMs / 1000.0));
+
+            var doseTask = Task.Run(() => _pmp.Dose(volumeMl));
+
+            for (int elapsed = 1; elapsed <= totalSeconds; elapsed++)
             {
-                double? tempC = _sensor.Read();
-                if (tempC.HasValue)
-                {
-                    if (tempC >= _cfg.PumpTempCriticalC)
-                        _logger.LogCritical("Température pompe CRITIQUE: {T}°C — arrêt requis", tempC);
-                    else if (tempC >= _cfg.PumpTempAlertC)
-                        _logger.LogWarning("Température pompe élevée: {T}°C", tempC);
-
-                    await _mqtt.PublishAsync(
-                        $"{_cfg.MqttPrefix}/pump_temp",
-                        tempC.Value.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                        ct: ct);
-                }
+                _display.Show("Amorcage ph-", $"{elapsed}/{totalSeconds}s...", 1100);
+                await Task.Delay(1000);
             }
-            catch (Exception ex) when (!ct.IsCancellationRequested)
-            { _logger.LogError(ex, "PumpTempService: erreur lecture DS18B20"); }
 
-            await Task.Delay(TimeSpan.FromSeconds(30), ct).ConfigureAwait(false);
+            await doseTask;
+            _display.Show("Amorcage ph-", "Termine", 2000);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Amorçage pompe: échec du dosage {Vol} mL", volumeMl);
+            _display.Show("Amorcage ph-", "ERREUR", 2000);
+        }
+        finally
+        {
+            Interlocked.Exchange(ref _priming, 0);
         }
     }
 }
