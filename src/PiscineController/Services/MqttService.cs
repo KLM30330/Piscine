@@ -4,6 +4,7 @@ using MQTTnet;
 using MQTTnet.Protocol;
 using PiscineController.Config;
 using PiscineController.Filtration;
+using PiscineController.Hardware;
 using PiscineController.Ph;
 using System.Text;
 using System.Text.Json;
@@ -16,6 +17,8 @@ public sealed class MqttService : BackgroundService
     private readonly PoolState _state;
     private readonly FiltrationManager _filtration;
     private readonly PhPidController _pid;
+    private readonly EzoPh _ph;
+    private readonly PumpPrimingService _priming;
     private readonly ILogger<MqttService> _logger;
     private IMqttClient? _client;
 
@@ -28,10 +31,11 @@ public sealed class MqttService : BackgroundService
 
     public MqttService(PoolConfig cfg, PoolState state,
         FiltrationManager filtration, PhPidController pid,
-        ILogger<MqttService> logger)
+        EzoPh ph, PumpPrimingService priming, ILogger<MqttService> logger)
     {
         _cfg = cfg; _state = state;
-        _filtration = filtration; _pid = pid; _logger = logger;
+        _filtration = filtration; _pid = pid;
+        _ph = ph; _priming = priming; _logger = logger;
     }
 
     protected override async Task ExecuteAsync(CancellationToken ct)
@@ -132,11 +136,17 @@ public sealed class MqttService : BackgroundService
                     _state.FilterMode = Enum.Parse<FilterMode>(char.ToUpper(payload[0]) + payload[1..]);
                     break;
                 case "freq":
-                    if (double.TryParse(payload, out double hz))
+                    if (double.TryParse(payload, System.Globalization.CultureInfo.InvariantCulture, out double hz))
                         _filtration.SetMode("forced", hz);
                     break;
                 case "reset_ph":
                     _pid.Reset();
+                    break;
+                case "prime":
+                    if (payload == "ON") _priming.TryPrime(_cfg.PrimeVolumeMl);
+                    break;
+                case "calibrate_mid":
+                    if (payload == "ON") _ph.CalibrateMid(_cfg.PhCalMidValue);
                     break;
             }
         }
@@ -195,6 +205,47 @@ public sealed class MqttService : BackgroundService
                 retain: true, ct: ct);
         }
 
+        async Task Switch(string id, string name, string commandSuffix,
+                           string payloadOn, string payloadOff,
+                           string? stateKey = null, string? stateValue = null,
+                           string stateTopic = "sensors")
+        {
+            // stateKey = null → switch optimiste (pas d'état persistant, ex.
+            // amorçage/étalonnage : actions ponctuelles sans "marche/arrêt").
+            // stateValue est la valeur à comparer côté état (ex. "Auto", le
+            // rendu PascalCase de l'enum FilterMode), distincte de payloadOn
+            // (ex. "auto", la commande MQTT effectivement envoyée) — les deux
+            // ne sont PAS forcément identiques.
+            string? topic = stateKey != null ? $"{dev}/{stateTopic}" : null;
+            string? template = stateKey != null
+                ? $"{{{{ 'ON' if value_json.{stateKey} == '{stateValue}' else 'OFF' }}}}"
+                : null;
+
+            bool optimistic = stateKey == null;
+            var p = new HaSwitchDiscoveryPayload(
+                name, $"{dev}_{id}", $"{dev}/cmd/{commandSuffix}",
+                topic, template, payloadOn, payloadOff,
+                optimistic, device);
+            await PublishAsync(
+                $"{_cfg.MqttHaDisc}/switch/{dev}/{id}/config",
+                JsonSerializer.Serialize(p, AppJsonContext.Default.HaSwitchDiscoveryPayload),
+                retain: true, ct: ct);
+        }
+
+        async Task Number(string id, string name, string commandSuffix,
+                           string stateKey, double min, double max, double step,
+                           string unit, string stateTopic = "drive")
+        {
+            var p = new HaNumberDiscoveryPayload(
+                name, $"{dev}_{id}", $"{dev}/cmd/{commandSuffix}",
+                $"{dev}/{stateTopic}", $"{{{{ value_json.{stateKey} }}}}",
+                min, max, step, unit, device);
+            await PublishAsync(
+                $"{_cfg.MqttHaDisc}/number/{dev}/{id}/config",
+                JsonSerializer.Serialize(p, AppJsonContext.Default.HaNumberDiscoveryPayload),
+                retain: true, ct: ct);
+        }
+
         // ── Capteurs eau (topic: {prefix}/sensors) ────────────────────────────
         await Sensor("ph",         "pH Piscine",        "PhValue",    "pH",  null);
         await Sensor("orp",        "ORP Piscine",       "OrpMv",      "mV",  null);
@@ -225,6 +276,29 @@ public sealed class MqttService : BackgroundService
         // en texte brut "ON"/"OFF" par ElectrolyzerService — pas de JSON ici) ───
         await BinarySensor("electrolyzer_running", "Electrolyseur en fonctionnement",
             null, "running", topicOverride: $"{dev}/electrolyzer/state");
+
+        // ── Modes de filtration (topic commande: {prefix}/cmd/mode, partagé
+        // entre les 4 switches ; état lu depuis SensorPayload.FilterMode) ──────
+        await Switch("mode_auto",   "Mode filtration auto",    "mode", "auto",   "auto", "FilterMode", "Auto");
+        await Switch("mode_forced", "Mode filtration forcée",  "mode", "forced", "auto", "FilterMode", "Forced");
+        await Switch("mode_boost",  "Mode filtration boost",   "mode", "boost",  "auto", "FilterMode", "Boost");
+        await Switch("mode_stop",   "Arrêt filtration",        "mode", "stop",   "auto", "FilterMode", "Stop");
+
+        // ── Fréquence de fonctionnement de la pompe (Hz) — entité "number" et
+        // non un switch : valeur continue, pas binaire. Réutilise cmd/freq,
+        // qui bascule aussi en mode forcé (cohérent avec le bouton physique).
+        await Number("pump_freq_setpoint", "Fréquence de fonctionnement pompe",
+            "freq", "SetpointHz", min: _cfg.FreqMinAbsolute, max: _cfg.FreqNominal,
+            step: 0.5, unit: "Hz");
+
+        // ── Amorçage pompe péristaltique : action ponctuelle, pas d'état
+        // persistant (switch optimiste, repasse à OFF côté HA après l'action).
+        await Switch("prime_pump", "Amorçage pompe péristaltique",
+            "prime", "ON", "OFF");
+
+        // ── Étalonnage pH (point milieu, solution tampon PhCalMidValue) ────────
+        await Switch("calibrate_ph_mid", "Étalonnage pH milieu",
+            "calibrate_mid", "ON", "OFF");
     }
 
     public override async Task StopAsync(CancellationToken ct)
