@@ -76,6 +76,7 @@ public sealed class PoolConfig
     public double PhDoseMinMl { get; set; } = 1.0;
     public double PhDoseMaxMl { get; set; } = 100.0;
     public double PhMinDelayS { get; set; } = 600.0;
+    public double PhCalMidValue { get; set; } = 7.0;
     public double PrimeVolumeMl { get; set; } = 20.0;
 
     // Boost
