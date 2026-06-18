@@ -25,6 +25,7 @@ public sealed class FiltrationManager
     public FilterMode Mode => _mode;
     public WaterState WaterState => _waterState;
     public double TargetFreqHz => _targetFreqHz;
+    public double ForcedFreqHz => _forcedFreqHz;
 
     public double RequiredHours(double tempC)
     {
