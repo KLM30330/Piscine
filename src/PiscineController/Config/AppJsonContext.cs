@@ -7,6 +7,8 @@ namespace PiscineController.Config;
 [JsonSerializable(typeof(DriveStatusPayload))]
 [JsonSerializable(typeof(HaDiscoveryPayload))]
 [JsonSerializable(typeof(HaBinaryDiscoveryPayload))]
+[JsonSerializable(typeof(HaSwitchDiscoveryPayload))]
+[JsonSerializable(typeof(HaNumberDiscoveryPayload))]
 [JsonSerializable(typeof(HaDeviceInfo))]
 [JsonSerializable(typeof(Dictionary<string, string>))]
 internal partial class AppJsonContext : JsonSerializerContext { }
@@ -14,7 +16,8 @@ internal partial class AppJsonContext : JsonSerializerContext { }
 public sealed record SensorPayload(
     double PhValue, double OrpMv, double WaterTempC,
     string WaterState, double TargetFreqHz, bool OrpAlarm,
-    double PhDoseTotalMl, bool PhAlarmLow);
+    double PhDoseTotalMl, bool PhAlarmLow,
+    string FilterMode, double PumpForcedFreqHz);
 
 public sealed record DriveStatusPayload(
     double OutFreqHz, double OutCurrentA, double OutVoltageV,
@@ -47,3 +50,26 @@ public sealed record HaBinaryDiscoveryPayload(
     [property: JsonPropertyName("payload_on")]     string PayloadOn,
     [property: JsonPropertyName("payload_off")]    string PayloadOff,
     [property: JsonPropertyName("device")]         HaDeviceInfo Device);
+
+public sealed record HaSwitchDiscoveryPayload(
+    [property: JsonPropertyName("name")]           string Name,
+    [property: JsonPropertyName("unique_id")]      string UniqueId,
+    [property: JsonPropertyName("command_topic")]  string CommandTopic,
+    [property: JsonPropertyName("state_topic")]    string? StateTopic,
+    [property: JsonPropertyName("value_template")] string? ValueTemplate,
+    [property: JsonPropertyName("payload_on")]     string PayloadOn,
+    [property: JsonPropertyName("payload_off")]    string PayloadOff,
+    [property: JsonPropertyName("optimistic")]     bool? Optimistic,
+    [property: JsonPropertyName("device")]         HaDeviceInfo Device);
+
+public sealed record HaNumberDiscoveryPayload(
+    [property: JsonPropertyName("name")]                 string Name,
+    [property: JsonPropertyName("unique_id")]            string UniqueId,
+    [property: JsonPropertyName("command_topic")]        string CommandTopic,
+    [property: JsonPropertyName("state_topic")]          string? StateTopic,
+    [property: JsonPropertyName("value_template")]       string? ValueTemplate,
+    [property: JsonPropertyName("min")]                  double Min,
+    [property: JsonPropertyName("max")]                  double Max,
+    [property: JsonPropertyName("step")]                 double Step,
+    [property: JsonPropertyName("unit_of_measurement")]  string? UnitOfMeasurement,
+    [property: JsonPropertyName("device")]               HaDeviceInfo Device);
