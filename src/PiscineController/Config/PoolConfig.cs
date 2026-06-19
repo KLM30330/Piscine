@@ -21,7 +21,7 @@ public sealed class PoolConfig
     public int LcdI2cAddr { get; set; } = 0x27;
 
     // 1-Wire DS18B20
-    public string? OnewirePumpSensorId { get; set; } = "a1-00a029cc9225";
+    public string? OnewirePumpSensorId { get; set; } = "28-0000000ab2df";
     public double PumpTempAlertC { get; set; } = 60.0;
     public double PumpTempCriticalC { get; set; } = 70.0;
 
