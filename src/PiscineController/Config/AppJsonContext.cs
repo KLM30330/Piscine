@@ -67,6 +67,8 @@ public sealed record HaSwitchDiscoveryPayload(
     [property: JsonPropertyName("value_template")] string? ValueTemplate,
     [property: JsonPropertyName("payload_on")]     string PayloadOn,
     [property: JsonPropertyName("payload_off")]    string PayloadOff,
+    [property: JsonPropertyName("state_on")]       string? StateOn,
+    [property: JsonPropertyName("state_off")]      string? StateOff,
     [property: JsonPropertyName("optimistic")]     bool? Optimistic,
     [property: JsonPropertyName("device")]         HaDeviceInfo Device);
 
