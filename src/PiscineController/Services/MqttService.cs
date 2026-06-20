@@ -18,6 +18,7 @@ public sealed class MqttService : BackgroundService
     private readonly FiltrationManager _filtration;
     private readonly PhPidController _pid;
     private readonly EzoPh _ph;
+    private readonly Wk600Drive _drive;
     private readonly PumpPrimingService _priming;
     private readonly ILogger<MqttService> _logger;
     private IMqttClient? _client;
@@ -31,11 +32,11 @@ public sealed class MqttService : BackgroundService
 
     public MqttService(PoolConfig cfg, PoolState state,
         FiltrationManager filtration, PhPidController pid,
-        EzoPh ph, PumpPrimingService priming, ILogger<MqttService> logger)
+        EzoPh ph, Wk600Drive drive, PumpPrimingService priming, ILogger<MqttService> logger)
     {
         _cfg = cfg; _state = state;
         _filtration = filtration; _pid = pid;
-        _ph = ph; _priming = priming; _logger = logger;
+        _ph = ph; _drive = drive; _priming = priming; _logger = logger;
     }
 
     protected override async Task ExecuteAsync(CancellationToken ct)
@@ -154,6 +155,9 @@ public sealed class MqttService : BackgroundService
                     break;
                 case "calibrate_mid":
                     if (payload == "ON") _ph.CalibrateMid(_cfg.PhCalMidValue);
+                    break;
+                case "reset_fault":
+                    if (payload == "ON") _drive.FaultReset();
                     break;
             }
         }
@@ -323,6 +327,12 @@ public sealed class MqttService : BackgroundService
         // ── Étalonnage pH (point milieu, solution tampon PhCalMidValue) ────────
         await Switch("calibrate_ph_mid", "Étalonnage pH milieu",
             "calibrate_mid", "ON", "OFF");
+
+        // ── Réinitialisation défaut variateur : action ponctuelle. Vérifiez
+        // que la cause du défaut a bien disparu (ex. moteur refroidi pour le
+        // code 9) avant de réinitialiser, sinon le défaut reviendra aussitôt.
+        await Switch("reset_fault_vfd", "Réinitialiser défaut variateur",
+            "reset_fault", "ON", "OFF");
 
         // ── Santé des bus matériels (topic {prefix}/health, publié par
         // HealthService toutes les 30s) — un binary_sensor "problème" +
