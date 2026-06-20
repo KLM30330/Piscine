@@ -6,6 +6,7 @@ namespace PiscineController.Config;
 [JsonSourceGenerationOptions(DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
 [JsonSerializable(typeof(SensorPayload))]
 [JsonSerializable(typeof(DriveStatusPayload))]
+[JsonSerializable(typeof(HealthPayload))]
 [JsonSerializable(typeof(HaDiscoveryPayload))]
 [JsonSerializable(typeof(HaBinaryDiscoveryPayload))]
 [JsonSerializable(typeof(HaSwitchDiscoveryPayload))]
@@ -25,6 +26,12 @@ public sealed record DriveStatusPayload(
     double OutPowerKw, int RunTimeH,
     int FaultCode, string FaultLabel, bool IsRunning, bool IsFault,
     bool AtSetpoint, double SetpointHz);
+
+// Champs "Problem" (et non "Ok") pour s'aligner directement sur le
+// device_class="problem" de Home Assistant : true = ON = problème détecté.
+public sealed record HealthPayload(
+    bool I2cProblem, bool OneWireProblem, bool Rs485Problem,
+    string I2cLastError, string OneWireLastError, string Rs485LastError);
 
 public sealed record HaDeviceInfo(
     [property: JsonPropertyName("identifiers")]  string[] Identifiers,
