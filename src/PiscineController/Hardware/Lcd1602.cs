@@ -1,12 +1,14 @@
 using System.Device.I2c;
 using System.Globalization;
 using System.Text;
+using PiscineController;
 
 namespace PiscineController.Hardware;
 
 public sealed class Lcd1602 : IDisposable
 {
     private readonly I2cDevice _device;
+    private readonly EquipmentHealth _health;
 
     // Écran éteint au démarrage : pas de rétroéclairage avant le premier
     // Show() explicite (cf. DisplayService). Initialize() respecte cet état.
@@ -16,10 +18,29 @@ public sealed class Lcd1602 : IDisposable
     private const byte ENABLE = 0x04;
     private const byte RS_DATA = 0x01;
 
-    public Lcd1602(int busId, int address)
+    public Lcd1602(int busId, int address, EquipmentHealth health)
     {
+        _health = health;
         _device = I2cDevice.Create(
             new I2cConnectionSettings(busId, address));
+    }
+
+    // Centralise la capture des erreurs I2C : auparavant, les 3 écritures
+    // brutes (SetBacklight + les 2 de WriteFourBits) n'avaient absolument
+    // aucune gestion d'erreur — une coupure I2C remontait en exception non
+    // gérée jusqu'à DisplayService.
+    private void WriteRaw(byte value)
+    {
+        try
+        {
+            _device.WriteByte(value);
+            _health.ReportSuccess(EquipmentBus.I2C, "LCD1602");
+        }
+        catch (Exception ex)
+        {
+            _health.ReportFailure(EquipmentBus.I2C, "LCD1602", ex);
+            throw; // DisplayService.ExecuteAsync capture déjà par commande
+        }
     }
 
     public void Initialize()
@@ -107,7 +128,7 @@ public sealed class Lcd1602 : IDisposable
     public void SetBacklight(bool on)
     {
         _backlight = on;
-        _device.WriteByte((byte)(_backlight ? LCD_BACKLIGHT : 0));
+        WriteRaw((byte)(_backlight ? LCD_BACKLIGHT : 0));
     }
 
     private static string NormalizeText(string text)
@@ -148,10 +169,10 @@ public sealed class Lcd1602 : IDisposable
     {
         byte bl = _backlight ? LCD_BACKLIGHT : (byte)0;
 
-        _device.WriteByte((byte)(val | bl | ENABLE));
+        WriteRaw((byte)(val | bl | ENABLE));
         Thread.Sleep(2);
 
-        _device.WriteByte((byte)((val | bl) & ~ENABLE));
+        WriteRaw((byte)((val | bl) & ~ENABLE));
         Thread.Sleep(1);
     }
 
