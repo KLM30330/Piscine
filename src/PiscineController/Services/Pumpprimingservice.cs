@@ -15,6 +15,12 @@ public sealed class PumpPrimingService
     private readonly ILogger<PumpPrimingService> _logger;
     private int _priming;
 
+    // Notifie le début/fin réel de l'amorçage (ex. pour publier un état sur
+    // MQTT) — l'amorçage étant asynchrone (chrono de plusieurs secondes), un
+    // simple avant/après autour de TryPrime() ne suffirait pas comme pour les
+    // commandes instantanées (étalonnage, reset défaut).
+    public event Action<bool>? StateChanged;
+
     public PumpPrimingService(EzoPmp pmp, DisplayService display, ILogger<PumpPrimingService> logger)
     {
         _pmp = pmp; _display = display; _logger = logger;
@@ -29,6 +35,7 @@ public sealed class PumpPrimingService
             return false;
         }
         _logger.LogInformation("Amorçage pompe doseuse {Vol} mL", volumeMl);
+        StateChanged?.Invoke(true);
         _ = RunAsync(volumeMl);
         return true;
     }
@@ -62,6 +69,7 @@ public sealed class PumpPrimingService
         finally
         {
             Interlocked.Exchange(ref _priming, 0);
+            StateChanged?.Invoke(false);
         }
     }
 }
