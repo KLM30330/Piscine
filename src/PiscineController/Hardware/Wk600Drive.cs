@@ -1,6 +1,7 @@
 using System.IO.Ports;
 using Microsoft.Extensions.Logging;
 using PiscineController.Config;
+using PiscineController;
 
 namespace PiscineController.Hardware;
 
@@ -10,6 +11,7 @@ public sealed class Wk600Drive : IDisposable
     private readonly byte _slaveId;
     private readonly PoolConfig _cfg;
     private readonly ILogger<Wk600Drive> _logger;
+    private readonly EquipmentHealth _health;
     private double _currentFreq;
     private bool _running;
     private readonly object _lock = new();
@@ -56,10 +58,11 @@ public sealed class Wk600Drive : IDisposable
     // ce sont respectivement l'état des entrées (X state) et des sorties (DO state)
     // numériques du variateur. L'ancien code les utilisait par erreur.
 
-    public Wk600Drive(PoolConfig cfg, ILogger<Wk600Drive> logger)
+    public Wk600Drive(PoolConfig cfg, ILogger<Wk600Drive> logger, EquipmentHealth health)
     {
         _cfg = cfg;
         _logger = logger;
+        _health = health;
         _slaveId = (byte)cfg.ModbusSlaveId;
         _port = OpenPort();
     }
@@ -103,14 +106,19 @@ public sealed class Wk600Drive : IDisposable
         }
     }
 
-    private void RecordFailure()
+    private void RecordFailure(string reason)
     {
         int count = Interlocked.Increment(ref _consecutiveFailures);
+        _health.ReportFailure(EquipmentBus.Rs485, "WK600-D", new TimeoutException(reason));
         if (count >= MaxConsecutiveFailuresBeforeReset)
             ResetPort();
     }
 
-    private void RecordSuccess() => Interlocked.Exchange(ref _consecutiveFailures, 0);
+    private void RecordSuccess()
+    {
+        Interlocked.Exchange(ref _consecutiveFailures, 0);
+        _health.ReportSuccess(EquipmentBus.Rs485, "WK600-D");
+    }
 
     public bool IsRunning     => _running;
     public double CurrentFreq => _currentFreq;
@@ -155,7 +163,7 @@ public sealed class Wk600Drive : IDisposable
                 _logger.LogWarning("WK600-D WriteRegister timeout addr=0x{Addr:X4} value={Value} " +
                                    "({Read}/8 octets reçus)", addr, value, read);
                 _port.DiscardInBuffer();
-                RecordFailure();
+                RecordFailure("WriteRegister timeout");
                 return false;
             }
 
@@ -201,7 +209,7 @@ public sealed class Wk600Drive : IDisposable
                 _logger.LogWarning("WK600-D ReadHoldingRegisters timeout addr=0x{Addr:X4} " +
                                    "({Read}/{Expected} octets reçus)", addr, read, expected);
                 _port.DiscardInBuffer();   // évite de polluer la prochaine requête
-                RecordFailure();
+                RecordFailure("ReadHoldingRegisters timeout");
                 return null;
             }
 
