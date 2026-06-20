@@ -1,5 +1,6 @@
 using System.Device.I2c;
 using Microsoft.Extensions.Logging;
+using PiscineController;
 
 namespace PiscineController.Hardware;
 
@@ -7,32 +8,46 @@ public abstract class AtlasEzoBase : IDisposable
 {
     private readonly I2cDevice _device;
     protected readonly ILogger _logger;
+    private readonly EquipmentHealth _health;
+    private readonly string _deviceName;
     private bool _disposed;
 
-    protected AtlasEzoBase(int busId, int address, ILogger logger)
+    protected AtlasEzoBase(int busId, int address, ILogger logger, EquipmentHealth health, string deviceName)
     {
         _logger = logger;
+        _health = health;
+        _deviceName = deviceName;
         _device = I2cDevice.Create(new I2cConnectionSettings(busId, address));
     }
 
     protected string? SendCommand(string command, int delayMs = 900)
     {
-        Span<byte> tx = stackalloc byte[command.Length];
-        for (int i = 0; i < command.Length; i++) tx[i] = (byte)command[i];
-        _device.Write(tx);
-
-        Thread.Sleep(delayMs);
-
-        Span<byte> rx = stackalloc byte[32];
-        _device.Read(rx);
-
-        if (rx[0] != 1)
+        try
         {
-            _logger.LogWarning("Atlas EZO réponse code {Code} pour commande '{Cmd}'", rx[0], command);
+            Span<byte> tx = stackalloc byte[command.Length];
+            for (int i = 0; i < command.Length; i++) tx[i] = (byte)command[i];
+            _device.Write(tx);
+
+            Thread.Sleep(delayMs);
+
+            Span<byte> rx = stackalloc byte[32];
+            _device.Read(rx);
+
+            if (rx[0] != 1)
+            {
+                _logger.LogWarning("Atlas EZO réponse code {Code} pour commande '{Cmd}'", rx[0], command);
+                return null;
+            }
+            int len = rx[1..].IndexOf((byte)0);
+            string result = System.Text.Encoding.ASCII.GetString(rx[1..(len < 0 ? 32 : len + 1)]);
+            _health.ReportSuccess(EquipmentBus.I2C, _deviceName);
+            return result;
+        }
+        catch (Exception ex)
+        {
+            _health.ReportFailure(EquipmentBus.I2C, _deviceName, ex);
             return null;
         }
-        int len = rx[1..].IndexOf((byte)0);
-        return System.Text.Encoding.ASCII.GetString(rx[1..(len < 0 ? 32 : len + 1)]);
     }
 
     public void Dispose()
@@ -45,8 +60,8 @@ public abstract class AtlasEzoBase : IDisposable
 
 public sealed class EzoPh : AtlasEzoBase
 {
-    public EzoPh(int busId, int address, ILogger<EzoPh> logger)
-        : base(busId, address, logger) { }
+    public EzoPh(int busId, int address, ILogger<EzoPh> logger, EquipmentHealth health)
+        : base(busId, address, logger, health, "EZO-pH") { }
 
     public double? Read()
     {
@@ -65,8 +80,8 @@ public sealed class EzoPh : AtlasEzoBase
 
 public sealed class EzoOrp : AtlasEzoBase
 {
-    public EzoOrp(int busId, int address, ILogger<EzoOrp> logger)
-        : base(busId, address, logger) { }
+    public EzoOrp(int busId, int address, ILogger<EzoOrp> logger, EquipmentHealth health)
+        : base(busId, address, logger, health, "EZO-ORP") { }
 
     public double? Read()
     {
@@ -78,8 +93,8 @@ public sealed class EzoOrp : AtlasEzoBase
 
 public sealed class EzoRtd : AtlasEzoBase
 {
-    public EzoRtd(int busId, int address, ILogger<EzoRtd> logger)
-        : base(busId, address, logger) { }
+    public EzoRtd(int busId, int address, ILogger<EzoRtd> logger, EquipmentHealth health)
+        : base(busId, address, logger, health, "EZO-RTD") { }
 
     public double? Read()
     {
@@ -91,8 +106,8 @@ public sealed class EzoRtd : AtlasEzoBase
 
 public sealed class EzoPmp : AtlasEzoBase
 {
-    public EzoPmp(int busId, int address, ILogger<EzoPmp> logger)
-        : base(busId, address, logger) { }
+    public EzoPmp(int busId, int address, ILogger<EzoPmp> logger, EquipmentHealth health)
+        : base(busId, address, logger, health, "EZO-PMP") { }
 
     // Durée estimée (ms) pour un dosage de volumeMl, y compris la marge de
     // sécurité de la pompe péristaltique. Public pour permettre à l'appelant
