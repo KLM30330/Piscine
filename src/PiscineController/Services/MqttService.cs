@@ -264,6 +264,14 @@ public sealed class MqttService : BackgroundService
             var p = new HaSwitchDiscoveryPayload(
                 name, $"{dev}_{id}", $"{dev}/cmd/{commandSuffix}",
                 topic, template, payloadOn, payloadOff,
+                // state_on/state_off sont TOUJOURS "ON"/"OFF" : c'est ce que le
+                // template rend (mode switches) ou ce que le topic brut publie
+                // déjà tel quel (switches d'action) — à ne PAS confondre avec
+                // payload_on/payload_off, les mots de commande effectivement
+                // envoyés (ex. "forced"/"auto"), qui peuvent être différents.
+                // Sans ça, HA fait par défaut state_on=payload_on et ne
+                // reconnaît donc jamais l'état pour les switches de mode.
+                "ON", "OFF",
                 optimistic, device);
             await PublishAsync(
                 $"{_cfg.MqttHaDisc}/switch/{dev}/{id}/config",
