@@ -26,45 +26,53 @@ var host = Host.CreateDefaultBuilder(args)
 
         services.AddSingleton(poolConfig);
         services.AddSingleton(_ => new PoolState());
+        services.AddSingleton(sp => new EquipmentHealth(sp.GetRequiredService<ILogger<EquipmentHealth>>()));
 
         // Hardware (singletons)
         services.AddSingleton(sp =>
         {
             var cfg = sp.GetRequiredService<PoolConfig>();
-            return new EzoPh(cfg.I2cBus, cfg.AtlasPhAddr, sp.GetRequiredService<ILogger<EzoPh>>());
+            return new EzoPh(cfg.I2cBus, cfg.AtlasPhAddr,
+                sp.GetRequiredService<ILogger<EzoPh>>(), sp.GetRequiredService<EquipmentHealth>());
         });
         services.AddSingleton(sp =>
         {
             var cfg = sp.GetRequiredService<PoolConfig>();
-            return new EzoOrp(cfg.I2cBus, cfg.AtlasOrpAddr, sp.GetRequiredService<ILogger<EzoOrp>>());
+            return new EzoOrp(cfg.I2cBus, cfg.AtlasOrpAddr,
+                sp.GetRequiredService<ILogger<EzoOrp>>(), sp.GetRequiredService<EquipmentHealth>());
         });
         services.AddSingleton(sp =>
         {
             var cfg = sp.GetRequiredService<PoolConfig>();
-            return new EzoRtd(cfg.I2cBus, cfg.AtlasRtdAddr, sp.GetRequiredService<ILogger<EzoRtd>>());
+            return new EzoRtd(cfg.I2cBus, cfg.AtlasRtdAddr,
+                sp.GetRequiredService<ILogger<EzoRtd>>(), sp.GetRequiredService<EquipmentHealth>());
         });
         services.AddSingleton(sp =>
         {
             var cfg = sp.GetRequiredService<PoolConfig>();
-            return new EzoPmp(cfg.I2cBus, cfg.AtlasPmpAddr, sp.GetRequiredService<ILogger<EzoPmp>>());
+            return new EzoPmp(cfg.I2cBus, cfg.AtlasPmpAddr,
+                sp.GetRequiredService<ILogger<EzoPmp>>(), sp.GetRequiredService<EquipmentHealth>());
         });
         services.AddSingleton(sp =>
         {
             var cfg = sp.GetRequiredService<PoolConfig>();
-            return new Pcf8574(cfg.I2cBus, cfg.Pcf8574Addr);
+            return new Pcf8574(cfg.I2cBus, cfg.Pcf8574Addr,
+                sp.GetRequiredService<EquipmentHealth>(), sp.GetRequiredService<ILogger<Pcf8574>>());
         });
         services.AddSingleton(sp =>
         {
             var cfg = sp.GetRequiredService<PoolConfig>();
-            return new Lcd1602(cfg.I2cBus, cfg.LcdI2cAddr);
+            return new Lcd1602(cfg.I2cBus, cfg.LcdI2cAddr, sp.GetRequiredService<EquipmentHealth>());
         });
         services.AddSingleton(sp =>
         {
             var cfg = sp.GetRequiredService<PoolConfig>();
-            return new Ds18b20(sp.GetRequiredService<ILogger<Ds18b20>>(), cfg.OnewirePumpSensorId);
+            return new Ds18b20(sp.GetRequiredService<ILogger<Ds18b20>>(),
+                sp.GetRequiredService<EquipmentHealth>(), cfg.OnewirePumpSensorId);
         });
         services.AddSingleton(sp =>
-            new Wk600Drive(sp.GetRequiredService<PoolConfig>(), sp.GetRequiredService<ILogger<Wk600Drive>>()));
+            new Wk600Drive(sp.GetRequiredService<PoolConfig>(),
+                sp.GetRequiredService<ILogger<Wk600Drive>>(), sp.GetRequiredService<EquipmentHealth>()));
         services.AddSingleton(sp =>
             new GpioButtons(sp.GetRequiredService<PoolConfig>(), sp.GetRequiredService<ILogger<GpioButtons>>()));
 
@@ -142,6 +150,11 @@ var host = Host.CreateDefaultBuilder(args)
             sp.GetRequiredService<PumpPrimingService>(),
             sp.GetRequiredService<DisplayService>(),
             sp.GetRequiredService<ILogger<ButtonService>>()));
+        services.AddHostedService(sp => new HealthService(
+            sp.GetRequiredService<PoolConfig>(),
+            sp.GetRequiredService<EquipmentHealth>(),
+            sp.GetRequiredService<MqttService>(),
+            sp.GetRequiredService<ILogger<HealthService>>()));
     })
     .Build();
 
