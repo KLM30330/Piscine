@@ -138,7 +138,7 @@ public sealed class MqttService : BackgroundService
         catch (Exception ex) { _logger.LogWarning(ex, "MQTT publish échoué ({Topic})", topic); }
     }
 
-    private Task OnMessageAsync(MqttApplicationMessageReceivedEventArgs args)
+    private async Task OnMessageAsync(MqttApplicationMessageReceivedEventArgs args)
     {
         string topic = args.ApplicationMessage.Topic;
         var seq = args.ApplicationMessage.Payload;
@@ -169,23 +169,22 @@ public sealed class MqttService : BackgroundService
                 case "calibrate_mid":
                     if (payload == "ON")
                     {
-                        await PublishAsync($"{_cfg.MqttPrefix}/action/calibrating", "ON", ct: ct);
+                        await PublishAsync($"{_cfg.MqttPrefix}/action/calibrating", "ON");
                         _ph.CalibrateMid(_cfg.PhCalMidValue);
-                        await PublishAsync($"{_cfg.MqttPrefix}/action/calibrating", "OFF", ct: ct);
+                        await PublishAsync($"{_cfg.MqttPrefix}/action/calibrating", "OFF");
                     }
                     break;
                 case "reset_fault":
                     if (payload == "ON")
                     {
-                        await PublishAsync($"{_cfg.MqttPrefix}/action/resetting_fault", "ON", ct: ct);
+                        await PublishAsync($"{_cfg.MqttPrefix}/action/resetting_fault", "ON");
                         _drive.FaultReset();
-                        await PublishAsync($"{_cfg.MqttPrefix}/action/resetting_fault", "OFF", ct: ct);
+                        await PublishAsync($"{_cfg.MqttPrefix}/action/resetting_fault", "OFF");
                     }
                     break;
             }
         }
         catch (Exception ex) { _logger.LogError(ex, "Erreur traitement commande {Cmd}", cmd); }
-        return Task.CompletedTask;
     }
 
     private async Task PublishHaDiscovery(CancellationToken ct)
