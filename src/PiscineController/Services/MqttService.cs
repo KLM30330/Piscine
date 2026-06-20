@@ -37,6 +37,19 @@ public sealed class MqttService : BackgroundService
         _cfg = cfg; _state = state;
         _filtration = filtration; _pid = pid;
         _ph = ph; _drive = drive; _priming = priming; _logger = logger;
+        _priming.StateChanged += OnPrimingStateChanged;
+    }
+
+    // L'amorçage est asynchrone (chrono de plusieurs secondes) : on publie
+    // l'état réel à chaque transition plutôt qu'en optimiste, pour que le
+    // switch HA ne reste pas bloqué "ON" après la fin réelle de l'action.
+    private void OnPrimingStateChanged(bool busy)
+    {
+        _ = Task.Run(async () =>
+        {
+            try { await PublishAsync($"{_cfg.MqttPrefix}/action/priming", busy ? "ON" : "OFF"); }
+            catch (Exception ex) { _logger.LogError(ex, "Échec publication état amorçage"); }
+        });
     }
 
     protected override async Task ExecuteAsync(CancellationToken ct)
@@ -154,10 +167,20 @@ public sealed class MqttService : BackgroundService
                     if (payload == "ON") _priming.TryPrime(_cfg.PrimeVolumeMl);
                     break;
                 case "calibrate_mid":
-                    if (payload == "ON") _ph.CalibrateMid(_cfg.PhCalMidValue);
+                    if (payload == "ON")
+                    {
+                        await PublishAsync($"{_cfg.MqttPrefix}/action/calibrating", "ON", ct: ct);
+                        _ph.CalibrateMid(_cfg.PhCalMidValue);
+                        await PublishAsync($"{_cfg.MqttPrefix}/action/calibrating", "OFF", ct: ct);
+                    }
                     break;
                 case "reset_fault":
-                    if (payload == "ON") _drive.FaultReset();
+                    if (payload == "ON")
+                    {
+                        await PublishAsync($"{_cfg.MqttPrefix}/action/resetting_fault", "ON", ct: ct);
+                        _drive.FaultReset();
+                        await PublishAsync($"{_cfg.MqttPrefix}/action/resetting_fault", "OFF", ct: ct);
+                    }
                     break;
             }
         }
@@ -225,20 +248,20 @@ public sealed class MqttService : BackgroundService
         async Task Switch(string id, string name, string commandSuffix,
                            string payloadOn, string payloadOff,
                            string? stateKey = null, string? stateValue = null,
-                           string stateTopic = "sensors")
+                           string stateTopic = "sensors", string? topicOverride = null)
         {
-            // stateKey = null → switch optimiste (pas d'état persistant, ex.
-            // amorçage/étalonnage : actions ponctuelles sans "marche/arrêt").
-            // stateValue est la valeur à comparer côté état (ex. "Auto", le
-            // rendu PascalCase de l'enum FilterMode), distincte de payloadOn
-            // (ex. "auto", la commande MQTT effectivement envoyée) — les deux
-            // ne sont PAS forcément identiques.
-            string? topic = stateKey != null ? $"{dev}/{stateTopic}" : null;
+            // stateKey = état JSON (ex. FilterMode) ; topicOverride = état en
+            // texte brut sur un topic dédié (ex. action/priming, déjà publié
+            // en ON/OFF par MqttService/PumpPrimingService). Optimiste
+            // uniquement si NI l'un NI l'autre n'est fourni — sinon le switch
+            // resterait bloqué dans la position du dernier appui côté HA,
+            // sans jamais refléter la fin réelle de l'action.
+            string? topic = topicOverride ?? (stateKey != null ? $"{dev}/{stateTopic}" : null);
             string? template = stateKey != null
                 ? $"{{{{ 'ON' if value_json.{stateKey} == '{stateValue}' else 'OFF' }}}}"
                 : null;
+            bool optimistic = topic == null;
 
-            bool optimistic = stateKey == null;
             var p = new HaSwitchDiscoveryPayload(
                 name, $"{dev}_{id}", $"{dev}/cmd/{commandSuffix}",
                 topic, template, payloadOn, payloadOff,
@@ -319,20 +342,20 @@ public sealed class MqttService : BackgroundService
             "freq", "SetpointHz", min: _cfg.FreqMinAbsolute, max: _cfg.FreqNominal,
             step: 0.5, unit: "Hz");
 
-        // ── Amorçage pompe péristaltique : action ponctuelle, pas d'état
-        // persistant (switch optimiste, repasse à OFF côté HA après l'action).
+        // ── Amorçage pompe péristaltique : état réel publié par
+        // PumpPrimingService (busy pendant tout le chrono de dosage).
         await Switch("prime_pump", "Amorçage pompe péristaltique",
-            "prime", "ON", "OFF");
+            "prime", "ON", "OFF", topicOverride: $"{dev}/action/priming");
 
         // ── Étalonnage pH (point milieu, solution tampon PhCalMidValue) ────────
         await Switch("calibrate_ph_mid", "Étalonnage pH milieu",
-            "calibrate_mid", "ON", "OFF");
+            "calibrate_mid", "ON", "OFF", topicOverride: $"{dev}/action/calibrating");
 
         // ── Réinitialisation défaut variateur : action ponctuelle. Vérifiez
         // que la cause du défaut a bien disparu (ex. moteur refroidi pour le
         // code 9) avant de réinitialiser, sinon le défaut reviendra aussitôt.
         await Switch("reset_fault_vfd", "Réinitialiser défaut variateur",
-            "reset_fault", "ON", "OFF");
+            "reset_fault", "ON", "OFF", topicOverride: $"{dev}/action/resetting_fault");
 
         // ── Santé des bus matériels (topic {prefix}/health, publié par
         // HealthService toutes les 30s) — un binary_sensor "problème" +
