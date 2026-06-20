@@ -1,17 +1,20 @@
 using Microsoft.Extensions.Logging;
+using PiscineController;
 
 namespace PiscineController.Hardware;
 
 public sealed class Ds18b20
 {
     private readonly ILogger<Ds18b20> _logger;
+    private readonly EquipmentHealth _health;
     private string? _devicePath;
 
     public bool IsAvailable => _devicePath != null;
 
-    public Ds18b20(ILogger<Ds18b20> logger, string? sensorId = null)
+    public Ds18b20(ILogger<Ds18b20> logger, EquipmentHealth health, string? sensorId = null)
     {
         _logger = logger;
+        _health = health;
         _devicePath = sensorId != null
             ? ResolveById(sensorId)
             : FindDevice();
@@ -53,20 +56,40 @@ public sealed class Ds18b20
 
     public double? Read()
     {
-        if (_devicePath == null) return null;   // sonde absente → silencieux
+        if (_devicePath == null)
+        {
+            _health.ReportFailure(EquipmentBus.OneWire, "DS18B20",
+                new IOException("aucune sonde 1-Wire détectée"));
+            return null;
+        }
 
         try
         {
             string content = File.ReadAllText(_devicePath);
-            if (!content.Contains("YES")) return null;
+            if (!content.Contains("YES"))
+            {
+                _health.ReportFailure(EquipmentBus.OneWire, "DS18B20",
+                    new IOException("CRC invalide (réponse 'NO')"));
+                return null;
+            }
 
             int idx = content.IndexOf("t=", StringComparison.Ordinal);
-            if (idx < 0) return null;
+            if (idx < 0)
+            {
+                _health.ReportFailure(EquipmentBus.OneWire, "DS18B20",
+                    new FormatException("marqueur 't=' absent de la réponse"));
+                return null;
+            }
 
             string raw = content[(idx + 2)..].Trim();
             if (int.TryParse(raw, out int milliC))
+            {
+                _health.ReportSuccess(EquipmentBus.OneWire, "DS18B20");
                 return milliC / 1000.0;
+            }
 
+            _health.ReportFailure(EquipmentBus.OneWire, "DS18B20",
+                new FormatException($"valeur illisible '{raw}'"));
             return null;
         }
         catch (IOException ex)
@@ -74,12 +97,14 @@ public sealed class Ds18b20
             // La sonde était là au démarrage mais a disparu (débranchée, etc.)
             _logger.LogWarning(ex, "DS18B20: sonde déconnectée ({Path}), " +
                                    "nouvelle tentative au prochain cycle", _devicePath);
+            _health.ReportFailure(EquipmentBus.OneWire, "DS18B20", ex);
             _devicePath = FindDevice();   // essaie de retrouver une sonde
             return null;
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "DS18B20: erreur lecture {Path}", _devicePath);
+            _health.ReportFailure(EquipmentBus.OneWire, "DS18B20", ex);
             return null;
         }
     }
