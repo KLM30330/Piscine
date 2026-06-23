@@ -100,7 +100,6 @@ public sealed class FiltrationManager
         {
             "auto"   => FilterMode.Auto,
             "forced" => FilterMode.Forced,
-            "boost"  => FilterMode.Boost,
             "pause"  => FilterMode.Pause,
             "stop"   => FilterMode.Stop,
             _ => _mode
@@ -115,7 +114,6 @@ public sealed class FiltrationManager
     {
         FilterMode.Auto   => InSchedule(),
         FilterMode.Forced => true,
-        FilterMode.Boost  => true,
         FilterMode.Pause  => false,
         FilterMode.Stop   => false,
         _ => false
@@ -124,15 +122,8 @@ public sealed class FiltrationManager
     public double GetRunFreq() => _mode switch
     {
         FilterMode.Forced => _forcedFreqHz,
-        FilterMode.Boost  => _cfg.BoostFreq,
         _ => _targetFreqHz
     };
-
-    public void CheckBoostExit(double orp)
-    {
-        if (_mode == FilterMode.Boost && orp >= _cfg.BoostOrpTarget)
-            _mode = FilterMode.Auto;
-    }
 
     public List<FiltrationSlot> BuildSchedule(double tempC, double freqHz = 50.0)
     {

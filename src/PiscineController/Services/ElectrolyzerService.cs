@@ -12,13 +12,6 @@ public sealed class ElectrolyzerService : BackgroundService
     private readonly MqttService _mqtt;
     private readonly string _mqttPrefix;
     private readonly ILogger<ElectrolyzerService> _logger;
-    // Pas de commande d'activation séparée pour l'électrolyseur : son
-    // fonctionnement dépend uniquement de l'engagement du relais PCF8574,
-    // lui-même verrouillé sur l'état réel de la pompe (cf. Apply()). On
-    // active donc la consigne par défaut pour que le relais s'engage dès
-    // que la pompe tourne. SetElectrolyzer() reste disponible si vous
-    // voulez ajouter plus tard une coupure manuelle (ex. hivernage).
-    private bool _electrolyzerOn = true;
     private bool? _lastActive;   // null = jamais publié, force le premier envoi
     private bool? _lastEnabled;  // idem, suivi indépendant de "enabled"
 
@@ -28,12 +21,22 @@ public sealed class ElectrolyzerService : BackgroundService
     {
         _state = state; _relay = relay;
         _mqtt = mqtt; _mqttPrefix = cfg.MqttPrefix; _logger = logger;
+
+        // La consigne (ElectrolyzerEnabled) vit dans PoolState, modifiable
+        // depuis MqttService sans dépendance circulaire (MqttService dépend
+        // déjà de PoolState, pas l'inverse). On réagit immédiatement à un
+        // changement plutôt que d'attendre le prochain cycle de 5s.
+        _state.ElectrolyzerEnabledChanged += _ => _ = ApplyAndPublishNowAsync();
     }
 
-    public void SetElectrolyzer(bool on)
+    private async Task ApplyAndPublishNowAsync()
     {
-        _electrolyzerOn = on;
-        Apply();
+        try
+        {
+            Apply();
+            await PublishStateAsync(CancellationToken.None);
+        }
+        catch (Exception ex) { _logger.LogError(ex, "Électrolyseur: erreur publication immédiate"); }
     }
 
     protected override async Task ExecuteAsync(CancellationToken ct)
@@ -59,17 +62,14 @@ public sealed class ElectrolyzerService : BackgroundService
     {
         // Verrou de sécurité : l'électrolyseur ne peut JAMAIS être actif si la
         // pompe ne tourne pas, quelle que soit la consigne utilisateur — vrai
-        // dans tous les modes de filtration (Auto/Forced/Boost/Pause/Stop),
+        // dans tous les modes de filtration (Auto/Forced/Pause/Stop),
         // puisque _state.PumpRunning reflète l'état réel matériel du variateur.
-        bool active = _electrolyzerOn && _state.PumpRunning;
+        bool active = _state.ElectrolyzerEnabled && _state.PumpRunning;
 
         // Pcf8574 : relais actif-bas (cf. constructeur, état par défaut 0xFF =
         // "relais désactivés"). Pour ACTIVER le relais il faut donc mettre la
         // broche à LOW (false), et à HIGH (true) pour le désactiver — c'est
-        // l'inverse de "active". L'ancien code faisait SetPin(0, active), ce
-        // qui activait le relais quand on le croyait inactif (et inversement) :
-        // avec _electrolyzerOn resté à false par défaut, le relais était donc
-        // en réalité activé en PERMANENCE, indépendamment de l'état de la pompe.
+        // l'inverse de "active".
         _relay.SetPin(0, !active);
         _state.ElectrolyzerRunning = active;
     }
@@ -77,7 +77,7 @@ public sealed class ElectrolyzerService : BackgroundService
     private async Task PublishStateAsync(CancellationToken ct)
     {
         bool active = _state.ElectrolyzerRunning;
-        bool enabled = _electrolyzerOn;
+        bool enabled = _state.ElectrolyzerEnabled;
 
         // _lastActive/_lastEnabled valent null avant le tout premier appel :
         // la comparaison bool? vs bool échoue alors systématiquement (null

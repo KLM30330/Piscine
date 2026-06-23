@@ -12,6 +12,14 @@ public sealed class PoolState
     private int _filterMode;
     private int _pumpRunning;
     private int _electrolyzerRunning;
+    private int _electrolyzerEnabled = 1;   // activé par défaut (suit la pompe)
+
+    // Déclenchés uniquement sur changement réel (pas à chaque écriture), pour
+    // permettre une publication MQTT immédiate au lieu d'attendre le prochain
+    // cycle périodique (jusqu'à 60s pour FilterMode via SensorService, 5s pour
+    // l'électrolyseur) — la latence perçue côté switch HA vient de là.
+    public event Action<FilterMode>? FilterModeChanged;
+    public event Action<bool>? ElectrolyzerEnabledChanged;
 
     public double WaterTempC
     {
@@ -36,7 +44,11 @@ public sealed class PoolState
     public FilterMode FilterMode
     {
         get => (FilterMode)Volatile.Read(ref _filterMode);
-        set => Volatile.Write(ref _filterMode, (int)value);
+        set
+        {
+            int old = Interlocked.Exchange(ref _filterMode, (int)value);
+            if (old != (int)value) FilterModeChanged?.Invoke(value);
+        }
     }
     public bool PumpRunning
     {
@@ -47,6 +59,16 @@ public sealed class PoolState
     {
         get => Volatile.Read(ref _electrolyzerRunning) == 1;
         set => Volatile.Write(ref _electrolyzerRunning, value ? 1 : 0);
+    }
+    public bool ElectrolyzerEnabled
+    {
+        get => Volatile.Read(ref _electrolyzerEnabled) == 1;
+        set
+        {
+            int newVal = value ? 1 : 0;
+            int old = Interlocked.Exchange(ref _electrolyzerEnabled, newVal);
+            if (old != newVal) ElectrolyzerEnabledChanged?.Invoke(value);
+        }
     }
 
     private readonly object _driveLock = new();

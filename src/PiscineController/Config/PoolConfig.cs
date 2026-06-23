@@ -21,7 +21,7 @@ public sealed class PoolConfig
     public int LcdI2cAddr { get; set; } = 0x27;
 
     // 1-Wire DS18B20
-    public string? OnewirePumpSensorId { get; set; } = "28-0000000ab2df";
+    public string? OnewirePumpSensorId { get; set; } = "28-0103804a321b";
     public double PumpTempAlertC { get; set; } = 60.0;
     public double PumpTempCriticalC { get; set; } = 70.0;
 
@@ -78,10 +78,6 @@ public sealed class PoolConfig
     public double PhMinDelayS { get; set; } = 600.0;
     public double PhCalMidValue { get; set; } = 7.0;
     public double PrimeVolumeMl { get; set; } = 20.0;
-
-    // Boost
-    public double BoostFreq { get; set; } = 50.0;
-    public double BoostOrpTarget { get; set; } = 700.0;
 
     // LCD
     public int LcdDisplayDuration { get; set; } = 30;

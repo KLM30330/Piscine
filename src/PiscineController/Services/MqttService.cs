@@ -38,6 +38,19 @@ public sealed class MqttService : BackgroundService
         _filtration = filtration; _pid = pid;
         _ph = ph; _drive = drive; _priming = priming; _logger = logger;
         _priming.StateChanged += OnPrimingStateChanged;
+        _state.FilterModeChanged += OnFilterModeChanged;
+    }
+
+    // Publie immédiatement le nouveau mode sur un topic dédié plutôt que
+    // d'attendre le prochain cycle SensorService (jusqu'à 60s) — c'est cette
+    // attente qui causait la latence perçue sur les switches de mode HA.
+    private void OnFilterModeChanged(FilterMode mode)
+    {
+        _ = Task.Run(async () =>
+        {
+            try { await PublishAsync($"{_cfg.MqttPrefix}/filter_mode", mode.ToString(), retain: true); }
+            catch (Exception ex) { _logger.LogError(ex, "Échec publication immédiate du mode"); }
+        });
     }
 
     // L'amorçage est asynchrone (chrono de plusieurs secondes) : on publie
@@ -166,6 +179,9 @@ public sealed class MqttService : BackgroundService
                 case "prime":
                     if (payload == "ON") _priming.TryPrime(_cfg.PrimeVolumeMl);
                     break;
+                case "electrolyzer":
+                    _state.ElectrolyzerEnabled = payload == "ON";
+                    break;
                 case "calibrate_mid":
                     if (payload == "ON")
                     {
@@ -249,16 +265,19 @@ public sealed class MqttService : BackgroundService
                            string? stateKey = null, string? stateValue = null,
                            string stateTopic = "sensors", string? topicOverride = null)
         {
-            // stateKey = état JSON (ex. FilterMode) ; topicOverride = état en
-            // texte brut sur un topic dédié (ex. action/priming, déjà publié
-            // en ON/OFF par MqttService/PumpPrimingService). Optimiste
-            // uniquement si NI l'un NI l'autre n'est fourni — sinon le switch
-            // resterait bloqué dans la position du dernier appui côté HA,
-            // sans jamais refléter la fin réelle de l'action.
+            // stateKey = état JSON (ex. value_json.X) ; topicOverride+stateValue
+            // = état en texte brut comparé directement (ex. filter_mode, qui
+            // publie "Forced"/"Auto"/... tel quel, sans JSON) ; topicOverride
+            // seul = passthrough brut ON/OFF direct (ex. action/priming).
+            // Optimiste uniquement si rien de tout ça n'est fourni — sinon le
+            // switch resterait bloqué dans la position du dernier appui côté
+            // HA, sans jamais refléter la fin réelle de l'action.
             string? topic = topicOverride ?? (stateKey != null ? $"{dev}/{stateTopic}" : null);
             string? template = stateKey != null
                 ? $"{{{{ 'ON' if value_json.{stateKey} == '{stateValue}' else 'OFF' }}}}"
-                : null;
+                : (stateValue != null
+                    ? $"{{{{ 'ON' if value == '{stateValue}' else 'OFF' }}}}"
+                    : null);
             bool optimistic = topic == null;
 
             var p = new HaSwitchDiscoveryPayload(
@@ -336,11 +355,22 @@ public sealed class MqttService : BackgroundService
             null, "running", topicOverride: $"{dev}/electrolyzer/state");
 
         // ── Modes de filtration (topic commande: {prefix}/cmd/mode, partagé
-        // entre les 4 switches ; état lu depuis SensorPayload.FilterMode) ──────
-        await Switch("mode_auto",   "Mode filtration auto",    "mode", "auto",   "auto", "FilterMode", "Auto");
-        await Switch("mode_forced", "Mode filtration forcée",  "mode", "forced", "auto", "FilterMode", "Forced");
-        await Switch("mode_boost",  "Mode filtration boost",   "mode", "boost",  "auto", "FilterMode", "Boost");
-        await Switch("mode_stop",   "Arrêt filtration",        "mode", "stop",   "auto", "FilterMode", "Stop");
+        // entre les 3 switches ; état lu depuis le topic filter_mode, publié
+        // immédiatement par MqttService.OnFilterModeChanged — pas via le
+        // cycle SensorPayload périodique, pour une mise à jour sans latence
+        // perceptible côté HA). Mode boost retiré.
+        await Switch("mode_auto",   "Mode filtration auto",    "mode", "auto",   "auto",
+            topicOverride: $"{dev}/filter_mode", stateValue: "Auto");
+        await Switch("mode_forced", "Mode filtration forcée",  "mode", "forced", "auto",
+            topicOverride: $"{dev}/filter_mode", stateValue: "Forced");
+        await Switch("mode_stop",   "Arrêt filtration",        "mode", "stop",   "auto",
+            topicOverride: $"{dev}/filter_mode", stateValue: "Stop");
+
+        // ── Électrolyseur : contrôle manuel (en plus du suivi automatique de
+        // la pompe). État réel déjà publié par ElectrolyzerService sur
+        // electrolyzer/enabled — pas de nouveau topic à créer.
+        await Switch("electrolyzer_manual", "Électrolyseur (manuel)",
+            "electrolyzer", "ON", "OFF", topicOverride: $"{dev}/electrolyzer/enabled");
 
         // ── Fréquence de fonctionnement de la pompe (Hz) — entité "number" et
         // non un switch : valeur continue, pas binaire. Réutilise cmd/freq,

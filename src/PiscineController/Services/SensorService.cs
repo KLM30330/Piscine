@@ -84,7 +84,6 @@ public sealed class SensorService : BackgroundService
         {
             var (waterState, targetFreq, alarm) = _filtration.UpdateOrp(orpMv.Value);
             _filtration.SetTargetFreq(targetFreq);
-            _filtration.CheckBoostExit(orpMv.Value);
             if (alarm) _logger.LogWarning("Alarme ORP: {Orp} mV — état {State}", orpMv.Value, waterState);
         }
 

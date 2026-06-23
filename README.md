@@ -60,11 +60,11 @@ Commande depuis home assistant:
 
 	- mode auto
 	- mode forcé
-	- mode boost
 	- arrêt filtration
 	- valeur de fréquence de fonctionnement de la pompe
 	- amorçage pompe péristaltique
 	- étalonnage de la sonde de ph
+	- électrolyseur (marche/arrêt manuel)
 
 Automations home assistant :
 	- si filtration auto => Notification journalière temps de fonctionnement de la pompe valeur Ph, redox, température + analyse
@@ -89,19 +89,27 @@ sudo systemctl enable --now piscine-controller
 sudo journalctl -u piscine-controller -f
 ```
 
-### Mettre à jour :
+### Mettre à jour la configuration seule (appsettings.json)
 ```bash
-# 1. Arrêter le service
-sudo systemctl stop piscine
+# Pas besoin de recompiler ni de toucher au binaire pour un changement de config
+sudo cp appsettings.json /opt/piscine/appsettings.json
+sudo systemctl restart piscine-controller
+sudo journalctl -u piscine-controller -f
+```
 
-# 2. Remplacer le binaire (adapte les chemins)
-cp /home/pi/Downloads/PiscineController /home/pi/pool/PiscineController
-chmod +x /home/pi/pool/PiscineController
+### Mettre à jour le binaire :
+```bash
+# 1. Arrêter le service (nom réel de l'unité, cf. systemd/piscine-controller.service)
+sudo systemctl stop piscine-controller
+
+# 2. Remplacer le binaire (chemin réel utilisé par le service : /opt/piscine)
+sudo cp /home/pi/Downloads/PiscineController /opt/piscine/PiscineController
+sudo chmod +x /opt/piscine/PiscineController
 
 # 3. Redémarrer le service
-sudo systemctl start piscine
+sudo systemctl start piscine-controller
 
 # 4. Vérifier
-sudo systemctl status piscine
-sudo journalctl -u piscine -f
+sudo systemctl status piscine-controller
+sudo journalctl -u piscine-controller -f
 ```

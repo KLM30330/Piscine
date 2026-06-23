@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=1024, height=600, user-scalable=no">
+<title>Piscine — Panneau de contrôle</title>
+<script src="https://unpkg.com/mqtt@5/dist/mqtt.min.js"></script>
+<style>
+/* ============================================================
+   PISCINE — panneau de contrôle tactile
+   Identité : panneau d'instruments marine/piscine — fond teal
+   profond évoquant l'eau la nuit, lectures en monospace comme
+   de vrais afficheurs d'équipement, accent aqua pour le nominal,
+   ambre/corail pour alerte/défaut. Signature : le sélecteur de
+   mode façon commutateur rotatif à curseur glissant.
+   ============================================================ */
+:root{
+  --bg:#0a1a1f; --panel:#0f242b; --panel-raised:#15323b;
+  --border:#1d3940; --text:#e6f2f1; --text-dim:#6f8f95;
+  --accent:#3fd0c9; --accent-dim:rgba(63,208,201,.14);
+  --warn:#e8a33d; --warn-dim:rgba(232,163,61,.14);
+  --danger:#e8553d; --danger-dim:rgba(232,85,61,.16);
+  --mono:ui-monospace,'Cascadia Code','JetBrains Mono','SF Mono',Menlo,Consolas,monospace;
+  --sans:-apple-system,'Segoe UI',Roboto,system-ui,sans-serif;
+  --radius:10px;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;user-select:none;}
+html,body{margin:0;padding:0;width:1024px;height:600px;overflow:hidden;
+  background:var(--bg);color:var(--text);font-family:var(--sans);}
+
+/* ── En-tête ── */
+header{height:54px;display:flex;align-items:center;justify-content:space-between;
+  padding:0 18px;border-bottom:1px solid var(--border);}
+.brand{display:flex;align-items:center;gap:10px;}
+.brand .dot{width:9px;height:9px;border-radius:50%;background:var(--text-dim);
+  transition:background .3s,box-shadow .3s;}
+.brand .dot.live{background:var(--accent);box-shadow:0 0 8px var(--accent);}
+.brand .dot.down{background:var(--danger);box-shadow:0 0 8px var(--danger);}
+.brand b{font-family:var(--mono);letter-spacing:.18em;font-size:15px;font-weight:600;}
+.brand span{font-size:11px;color:var(--text-dim);}
+#clock{font-family:var(--mono);font-size:14px;color:var(--text-dim);}
+
+/* ── Bandeau défaut variateur (masqué par défaut) ── */
+#faultBar{display:none;background:var(--danger-dim);color:var(--danger);
+  font-family:var(--mono);font-size:13px;padding:6px 18px;border-bottom:1px solid var(--border);}
+#faultBar.show{display:block;}
+
+/* ── Corps ── */
+main{display:flex;height:calc(600px - 54px);}
+.col-instruments{flex:1.7;display:grid;grid-template-columns:1fr 1fr 1fr;
+  grid-template-rows:1fr 1fr;gap:10px;padding:12px;}
+.col-control{flex:1;display:flex;flex-direction:column;gap:10px;padding:12px 12px 12px 0;}
+
+/* ── Cartes instrument ── */
+.card{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);
+  padding:10px 14px;display:flex;flex-direction:column;justify-content:center;position:relative;
+  transition:border-color .3s,background .3s;}
+.card .label{font-size:11px;color:var(--text-dim);letter-spacing:.04em;text-transform:uppercase;}
+.card .value{font-family:var(--mono);font-size:30px;font-weight:600;line-height:1.15;margin-top:2px;}
+.card .unit{font-size:14px;color:var(--text-dim);font-weight:400;margin-left:3px;}
+.card .sub{font-size:11px;margin-top:3px;color:var(--text-dim);}
+.card.state-warn{border-color:var(--warn);background:var(--warn-dim);}
+.card.state-warn .value{color:var(--warn);}
+.card.state-danger{border-color:var(--danger);background:var(--danger-dim);}
+.card.state-danger .value{color:var(--danger);}
+.card.state-good .sub{color:var(--accent);}
+.runlight{position:absolute;top:10px;right:12px;width:8px;height:8px;border-radius:50%;
+  background:var(--text-dim);}
+.runlight.on{background:var(--accent);box-shadow:0 0 6px var(--accent);}
+
+/* ── Sélecteur de mode (signature : commutateur à curseur glissant) ── */
+.modebox{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:12px;}
+.modebox .label{font-size:11px;color:var(--text-dim);letter-spacing:.04em;text-transform:uppercase;margin-bottom:8px;}
+.segmented{position:relative;display:grid;grid-template-columns:repeat(3,1fr);
+  background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:3px;height:46px;}
+.segmented .highlight{position:absolute;top:3px;left:3px;height:40px;
+  width:calc(33.333% - 4px);background:var(--accent-dim);border:1px solid var(--accent);
+  border-radius:6px;transition:left .25s cubic-bezier(.4,0,.2,1);}
+.segmented button{position:relative;z-index:1;background:none;border:none;color:var(--text-dim);
+  font-family:var(--sans);font-size:13px;font-weight:600;cursor:pointer;border-radius:6px;
+  height:100%;transition:color .25s;}
+.segmented button.active{color:var(--accent);}
+
+/* ── Fréquence ── */
+.freqbox{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);
+  padding:12px;flex:1;display:flex;flex-direction:column;justify-content:center;}
+.freqbox .row1{display:flex;justify-content:space-between;align-items:baseline;}
+.freqbox .label{font-size:11px;color:var(--text-dim);letter-spacing:.04em;text-transform:uppercase;}
+.freqbox .reading{font-family:var(--mono);font-size:26px;font-weight:600;}
+.freqbox .reading .unit{font-size:13px;color:var(--text-dim);}
+.freqbox input[type=range]{width:100%;margin-top:10px;height:34px;background:transparent;
+  -webkit-appearance:none;}
+.freqbox input[type=range]::-webkit-slider-runnable-track{height:6px;background:var(--border);border-radius:3px;}
+.freqbox input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:30px;height:30px;
+  margin-top:-12px;border-radius:50%;background:var(--accent);border:3px solid var(--bg);
+  box-shadow:0 0 0 1px var(--accent);}
+.freqbox .hint{font-size:10px;color:var(--text-dim);margin-top:6px;}
+
+/* ── Boutons d'action (confirmation double-tap) ── */
+.actions{display:flex;gap:10px;}
+.actionbtn{flex:1;background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);
+  color:var(--text);font-family:var(--sans);font-size:12.5px;font-weight:600;text-align:center;
+  padding:12px 6px;cursor:pointer;line-height:1.3;transition:background .2s,border-color .2s,color .2s;}
+.actionbtn .sub{display:block;font-size:10px;color:var(--text-dim);font-weight:400;margin-top:3px;}
+.actionbtn.confirm{background:var(--warn-dim);border-color:var(--warn);color:var(--warn);}
+.actionbtn.confirm .sub{color:var(--warn);}
+.actionbtn.busy{background:var(--accent-dim);border-color:var(--accent);color:var(--accent);}
+
+/* ── Pied : santé équipements ── */
+footer{height:34px;display:flex;align-items:center;gap:18px;padding:0 18px;
+  border-top:1px solid var(--border);font-size:11px;color:var(--text-dim);}
+footer .health{display:flex;align-items:center;gap:6px;cursor:pointer;}
+footer .health .dot{width:7px;height:7px;border-radius:50%;background:var(--accent);}
+footer .health.problem .dot{background:var(--danger);box-shadow:0 0 5px var(--danger);}
+#healthDetail{margin-left:auto;font-family:var(--mono);font-size:10.5px;color:var(--danger);
+  max-width:480px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <div class="dot" id="connDot"></div>
+    <b>PISCINE</b>
+    <span id="connLabel">connexion…</span>
+  </div>
+  <div id="clock">--:--:--</div>
+</header>
+
+<div id="faultBar"></div>
+
+<main>
+  <div class="col-instruments">
+    <div class="card" id="cardPh">
+      <div class="label">pH</div>
+      <div class="value"><span id="phValue">--</span></div>
+      <div class="sub">cible 7.2</div>
+    </div>
+
+    <div class="card" id="cardOrp">
+      <div class="label">Redox (ORP)</div>
+      <div class="value"><span id="orpValue">--</span><span class="unit">mV</span></div>
+      <div class="sub" id="orpState">—</div>
+    </div>
+
+    <div class="card" id="cardWaterTemp">
+      <div class="label">Température eau</div>
+      <div class="value"><span id="waterTempValue">--</span><span class="unit">°C</span></div>
+      <div class="sub">&nbsp;</div>
+    </div>
+
+    <div class="card" id="cardPump">
+      <div class="runlight" id="pumpRunlight"></div>
+      <div class="label">Pompe filtration</div>
+      <div class="value"><span id="pumpFreqValue">--</span><span class="unit">Hz</span></div>
+      <div class="sub" id="pumpSub">consigne -- Hz</div>
+    </div>
+
+    <div class="card" id="cardPumpTemp">
+      <div class="label">Température pompe</div>
+      <div class="value"><span id="pumpTempValue">--</span><span class="unit">°C</span></div>
+      <div class="sub">&nbsp;</div>
+    </div>
+
+    <div class="card" id="cardElec">
+      <div class="runlight" id="elecRunlight"></div>
+      <div class="label">Électrolyseur</div>
+      <div class="value" id="elecValue">--</div>
+      <div class="sub">&nbsp;</div>
+    </div>
+  </div>
+
+  <div class="col-control">
+    <div class="modebox">
+      <div class="label">Mode filtration</div>
+      <div class="segmented" id="modeSeg">
+        <div class="highlight" id="modeHighlight"></div>
+        <button data-mode="auto">Auto</button>
+        <button data-mode="forced">Forcé</button>
+        <button data-mode="stop">Stop</button>
+      </div>
+    </div>
+
+    <div class="freqbox">
+      <div class="row1">
+        <span class="label">Consigne fréquence</span>
+        <span class="reading"><span id="freqSliderValue">--</span><span class="unit"> Hz</span></span>
+      </div>
+      <input type="range" id="freqSlider" min="30" max="50" step="0.5" value="40">
+      <div class="hint">Relâcher pour envoyer — bascule automatiquement en mode forcé</div>
+    </div>
+
+    <div class="actions">
+      <div class="actionbtn" id="btnPrime">
+        Amorçage pompe<span class="sub">doseuse pH-</span>
+      </div>
+      <div class="actionbtn" id="btnCal">
+        Étalonnage pH<span class="sub">milieu (7.0)</span>
+      </div>
+    </div>
+  </div>
+</main>
+
+<footer>
+  <div class="health" id="healthI2c"><div class="dot"></div>I2C</div>
+  <div class="health" id="healthOneWire"><div class="dot"></div>One-wire</div>
+  <div class="health" id="healthRs485"><div class="dot"></div>RS485</div>
+  <div id="healthDetail"></div>
+</footer>
+
+<script>
+/* ============================================================
+   CONFIGURATION — à adapter à votre installation
+   ============================================================ */
+const MQTT_URL    = "ws://ADRESSE_DE_VOTRE_BROKER:9001"; // ex: ws://192.168.1.50:9001
+const MQTT_USER   = "";                                   // si authentification activée
+const MQTT_PASS   = "";
+const MQTT_PREFIX = "pool";                                // doit correspondre à PoolConfig.MqttPrefix
+
+/* ============================================================
+   Connexion MQTT
+   ============================================================ */
+const T = {
+  sensors: `${MQTT_PREFIX}/sensors`,
+  drive: `${MQTT_PREFIX}/drive`,
+  electrolyzer: `${MQTT_PREFIX}/electrolyzer/state`,
+  pumpTemp: `${MQTT_PREFIX}/pump_temp`,
+  health: `${MQTT_PREFIX}/health`,
+  status: `${MQTT_PREFIX}/status`,
+  cmdMode: `${MQTT_PREFIX}/cmd/mode`,
+  cmdFreq: `${MQTT_PREFIX}/cmd/freq`,
+  cmdPrime: `${MQTT_PREFIX}/cmd/prime`,
+  cmdCalMid: `${MQTT_PREFIX}/cmd/calibrate_mid`,
+};
+
+const connDot = document.getElementById('connDot');
+const connLabel = document.getElementById('connLabel');
+
+const client = mqtt.connect(MQTT_URL, {
+  username: MQTT_USER || undefined,
+  password: MQTT_PASS || undefined,
+  reconnectPeriod: 3000,
+});
+
+client.on('connect', () => {
+  connDot.className = 'dot live';
+  connLabel.textContent = 'en ligne';
+  Object.values(T).filter(t => !t.startsWith(MQTT_PREFIX + '/cmd/')).forEach(t => client.subscribe(t));
+});
+client.on('reconnect', () => { connDot.className = 'dot'; connLabel.textContent = 'reconnexion…'; });
+client.on('close',     () => { connDot.className = 'dot down'; connLabel.textContent = 'hors ligne'; });
+client.on('error',     () => { connDot.className = 'dot down'; connLabel.textContent = 'erreur'; });
+
+client.on('message', (topic, payloadBuf) => {
+  const payload = payloadBuf.toString();
+  try {
+    if (topic === T.sensors) renderSensors(JSON.parse(payload));
+    else if (topic === T.drive) renderDrive(JSON.parse(payload));
+    else if (topic === T.health) renderHealth(JSON.parse(payload));
+    else if (topic === T.electrolyzer) renderElectrolyzer(payload);
+    else if (topic === T.pumpTemp) renderPumpTemp(payload);
+    else if (topic === T.status) {
+      if (payload === 'offline') { connDot.className = 'dot down'; connLabel.textContent = 'contrôleur hors ligne'; }
+    }
+  } catch (e) { console.error('Message MQTT illisible', topic, e); }
+});
+
+/* ============================================================
+   Rendu — capteurs (pool/sensors)
+   ============================================================ */
+const ORP_ZONES = [
+  { max: 550, label: 'Critique',     cls: 'state-danger' },
+  { max: 620, label: 'Bas',          cls: 'state-warn' },
+  { max: 650, label: 'Limite basse', cls: 'state-warn' },
+  { max: 750, label: 'Optimal',      cls: 'state-good' },
+  { max: 800, label: 'Limite haute', cls: 'state-warn' },
+  { max: Infinity, label: 'Surdosage', cls: 'state-warn' },
+];
+
+function renderSensors(d) {
+  document.getElementById('phValue').textContent = d.PhValue.toFixed(2);
+  document.getElementById('cardPh').classList.toggle('state-danger', !!d.PhAlarmLow);
+
+  document.getElementById('orpValue').textContent = Math.round(d.OrpMv);
+  const zone = ORP_ZONES.find(z => d.OrpMv <= z.max);
+  document.getElementById('orpState').textContent = zone.label;
+  const cardOrp = document.getElementById('cardOrp');
+  cardOrp.className = 'card ' + (d.OrpAlarm ? 'state-danger' : zone.cls);
+
+  document.getElementById('waterTempValue').textContent = d.WaterTempC.toFixed(1);
+  document.getElementById('pumpSub').textContent = `consigne auto ${d.TargetFreqHz.toFixed(0)} Hz`;
+
+  setActiveMode(d.FilterMode);
+  if (!freqSliderDragging) {
+    freqSlider.value = d.PumpForcedFreqHz;
+    document.getElementById('freqSliderValue').textContent = Number(d.PumpForcedFreqHz).toFixed(1);
+  }
+}
+
+function renderDrive(d) {
+  document.getElementById('pumpFreqValue').textContent = d.OutFreqHz.toFixed(1);
+  document.getElementById('pumpRunlight').classList.toggle('on', !!d.IsRunning);
+  const fb = document.getElementById('faultBar');
+  if (d.IsFault) {
+    fb.textContent = `⚠ Défaut variateur — ${d.FaultLabel} (code ${d.FaultCode})`;
+    fb.classList.add('show');
+  } else {
+    fb.classList.remove('show');
+  }
+}
+
+function renderElectrolyzer(state) {
+  const on = state === 'ON';
+  document.getElementById('elecValue').textContent = on ? 'En marche' : 'Arrêté';
+  document.getElementById('elecRunlight').classList.toggle('on', on);
+}
+
+function renderPumpTemp(raw) {
+  const t = parseFloat(raw);
+  document.getElementById('pumpTempValue').textContent = isNaN(t) ? '--' : t.toFixed(1);
+  const card = document.getElementById('cardPumpTemp');
+  card.classList.remove('state-warn', 'state-danger');
+  if (t >= 70) card.classList.add('state-danger');
+  else if (t >= 60) card.classList.add('state-warn');
+}
+
+function renderHealth(d) {
+  setHealthDot('healthI2c', d.I2cProblem, d.I2cLastError);
+  setHealthDot('healthOneWire', d.OneWireProblem, d.OneWireLastError);
+  setHealthDot('healthRs485', d.Rs485Problem, d.Rs485LastError);
+}
+function setHealthDot(id, problem, lastError) {
+  const el = document.getElementById(id);
+  el.classList.toggle('problem', !!problem);
+  if (problem) el.dataset.error = lastError;
+}
+document.querySelectorAll('footer .health').forEach(el => {
+  el.addEventListener('click', () => {
+    document.getElementById('healthDetail').textContent = el.classList.contains('problem')
+      ? (el.dataset.error || 'Erreur inconnue') : '';
+  });
+});
+
+/* ============================================================
+   Sélecteur de mode
+   ============================================================ */
+const segBtns = Array.from(document.querySelectorAll('#modeSeg button'));
+const modeHighlight = document.getElementById('modeHighlight');
+function setActiveMode(modeName) {
+  const key = (modeName || '').toLowerCase();
+  const idx = segBtns.findIndex(b => b.dataset.mode === key);
+  segBtns.forEach(b => b.classList.toggle('active', b.dataset.mode === key));
+  if (idx >= 0) modeHighlight.style.left = `calc(${idx * 33.333}% + 3px)`;
+}
+segBtns.forEach(btn => btn.addEventListener('click', () => {
+  client.publish(T.cmdMode, btn.dataset.mode);
+}));
+
+/* ============================================================
+   Fréquence (slider — publication au relâchement uniquement)
+   ============================================================ */
+const freqSlider = document.getElementById('freqSlider');
+let freqSliderDragging = false;
+freqSlider.addEventListener('input', () => {
+  freqSliderDragging = true;
+  document.getElementById('freqSliderValue').textContent = Number(freqSlider.value).toFixed(1);
+});
+['change', 'touchend', 'mouseup'].forEach(evt =>
+  freqSlider.addEventListener(evt, () => {
+    client.publish(T.cmdFreq, Number(freqSlider.value).toFixed(1));
+    setTimeout(() => { freqSliderDragging = false; }, 500);
+  })
+);
+
+/* ============================================================
+   Boutons d'action — confirmation à double appui
+   ============================================================ */
+function armConfirmButton(el, label, subLabel, topic, payload) {
+  let armed = false, timer = null;
+  el.addEventListener('click', () => {
+    if (!armed) {
+      armed = true;
+      el.classList.add('confirm');
+      el.innerHTML = `Confirmer ?<span class="sub">${subLabel}</span>`;
+      timer = setTimeout(() => disarm(), 4000);
+    } else {
+      clearTimeout(timer);
+      client.publish(topic, payload);
+      el.classList.remove('confirm');
+      el.classList.add('busy');
+      el.innerHTML = `Envoyé<span class="sub">${subLabel}</span>`;
+      setTimeout(() => { el.classList.remove('busy'); reset(); }, 2500);
+      armed = false;
+    }
+  });
+  function disarm() {
+    armed = false;
+    el.classList.remove('confirm');
+    reset();
+  }
+  function reset() { el.innerHTML = `${label}<span class="sub">${subLabel}</span>`; }
+}
+armConfirmButton(document.getElementById('btnPrime'), 'Amorçage pompe', 'doseuse pH-', T.cmdPrime, 'ON');
+armConfirmButton(document.getElementById('btnCal'), 'Étalonnage pH', 'milieu (7.0)', T.cmdCalMid, 'ON');
+
+/* ============================================================
+   Horloge
+   ============================================================ */
+function tickClock() {
+  document.getElementById('clock').textContent =
+    new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+}
+tickClock();
+setInterval(tickClock, 1000);
+</script>
+</body>
+</html>
