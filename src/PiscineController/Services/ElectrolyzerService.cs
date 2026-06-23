@@ -26,7 +26,7 @@ public sealed class ElectrolyzerService : BackgroundService
         // depuis MqttService sans dépendance circulaire (MqttService dépend
         // déjà de PoolState, pas l'inverse). On réagit immédiatement à un
         // changement plutôt que d'attendre le prochain cycle de 5s.
-        _state.ElectrolyzerEnabledChanged += _ => _ = ApplyAndPublishNowAsync();
+        _state.ElectrolyzerEnabledChanged += enabled => { _ = ApplyAndPublishNowAsync(); };
     }
 
     private async Task ApplyAndPublishNowAsync()
