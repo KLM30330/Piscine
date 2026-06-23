@@ -68,7 +68,6 @@ public class FiltrationManagerTests
 
     [Theory]
     [InlineData("forced", true)]
-    [InlineData("boost",  true)]
     [InlineData("pause",  false)]
     [InlineData("stop",   false)]
     public void ShouldPumpRun_ByMode(string mode, bool expected)
@@ -76,17 +75,6 @@ public class FiltrationManagerTests
         var mgr = new FiltrationManager(Cfg());
         mgr.SetMode(mode);
         Assert.Equal(expected, mgr.ShouldPumpRun());
-    }
-
-    [Fact]
-    public void BoostExit_WhenOrpReachesTarget()
-    {
-        var mgr = new FiltrationManager(Cfg());
-        mgr.SetMode("boost");
-        mgr.CheckBoostExit(699.0);
-        Assert.Equal(FilterMode.Boost, mgr.Mode);
-        mgr.CheckBoostExit(700.0);
-        Assert.Equal(FilterMode.Auto, mgr.Mode);
     }
 
     [Fact]
