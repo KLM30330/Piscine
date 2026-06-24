@@ -40,7 +40,7 @@ public sealed class SensorService : BackgroundService
             try { await ReadAndPublish(ct); }
             catch (Exception ex) when (!ct.IsCancellationRequested)
             { _logger.LogError(ex, "SensorService: erreur lecture capteurs"); }
-            await Task.Delay(TimeSpan.FromSeconds(60), ct).ConfigureAwait(false);
+            await Task.Delay(TimeSpan.FromSeconds(5), ct).ConfigureAwait(false);
         }
     }
 

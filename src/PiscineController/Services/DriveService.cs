@@ -47,7 +47,7 @@ public sealed class DriveService : BackgroundService
             catch (Exception ex) when (!ct.IsCancellationRequested)
             { _logger.LogError(ex, "DriveService: erreur lecture variateur"); }
 
-            await Task.Delay(TimeSpan.FromSeconds(30), ct).ConfigureAwait(false);
+            await Task.Delay(TimeSpan.FromSeconds(5), ct).ConfigureAwait(false);
         }
     }
 }
