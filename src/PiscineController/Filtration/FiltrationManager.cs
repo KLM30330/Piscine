@@ -27,6 +27,13 @@ public sealed class FiltrationManager
     public double TargetFreqHz => _targetFreqHz;
     public double ForcedFreqHz => _forcedFreqHz;
 
+    // Accès lecture seule au planning courant et au temps calculé,
+    // pour permettre à FiltrationService de les publier en MQTT.
+    public IReadOnlyList<FiltrationSlot> CurrentSchedule => _schedule;
+    public double CurrentRequiredHours => _schedule.Count > 0
+        ? _schedule.Sum(s => s.End - s.Start)
+        : 0.0;
+
     public double RequiredHours(double tempC)
     {
         double minH = _cfg.PoolVolumeM3 / _cfg.PumpFlowM3H;

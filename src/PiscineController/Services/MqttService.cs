@@ -403,6 +403,13 @@ public sealed class MqttService : BackgroundService
         await Sensor("health_i2c_error",     "Dernière erreur I2C",      "I2cLastError",     "", null, "health");
         await Sensor("health_onewire_error", "Dernière erreur one-wire", "OneWireLastError", "", null, "health");
         await Sensor("health_rs485_error",   "Dernière erreur RS485",    "Rs485LastError",   "", null, "health");
+
+        // ── Planning filtration (topic {prefix}/schedule, publié en retain
+        // par FiltrationService après chaque rebuild quotidien) ───────────────
+        await Sensor("filtration_hours",  "Durée filtration calculée",
+            "required_hours", "h", "duration", "schedule");
+        await Sensor("filtration_slots",  "Créneaux de filtration",
+            "slots_label", "", null, "schedule");
     }
 
     public override async Task StopAsync(CancellationToken ct)

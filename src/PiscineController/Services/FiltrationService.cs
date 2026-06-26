@@ -12,14 +12,16 @@ public sealed class FiltrationService : BackgroundService
     private readonly PoolState _state;
     private readonly FiltrationManager _filtration;
     private readonly Wk600Drive _drive;
+    private readonly MqttService _mqtt;
     private readonly ILogger<FiltrationService> _logger;
 
     public FiltrationService(PoolConfig cfg, PoolState state,
         FiltrationManager filtration, Wk600Drive drive,
-        ILogger<FiltrationService> logger)
+        MqttService mqtt, ILogger<FiltrationService> logger)
     {
         _cfg = cfg; _state = state;
-        _filtration = filtration; _drive = drive; _logger = logger;
+        _filtration = filtration; _drive = drive;
+        _mqtt = mqtt; _logger = logger;
     }
 
     protected override async Task ExecuteAsync(CancellationToken ct)
@@ -54,6 +56,36 @@ public sealed class FiltrationService : BackgroundService
                     _logger.LogInformation("Planning filtration reconstruit ({Count} créneau(x)): {Slots}",
                         schedule.Count,
                         string.Join(", ", schedule.Select(s => $"[{s.Start:F1}-{s.End:F1}]")));
+
+                    // Conversion en format lisible hh:mm–hh:mm pour HA et panneau tactile
+                    static string ToHM(double h)
+                    {
+                        int hh = (int)h % 24;
+                        int mm = (int)Math.Round((h - Math.Floor(h)) * 60);
+                        if (mm == 60) { hh++; mm = 0; }
+                        return $"{hh:D2}h{mm:D2}";
+                    }
+
+                    var slots = schedule.Select(s => new ScheduleSlot(
+                        s.Start, s.End,
+                        $"{ToHM(s.Start)}–{ToHM(s.End)}")).ToList();
+
+                    var payload = new SchedulePayload(
+                        RequiredHours: _filtration.CurrentRequiredHours,
+                        WaterTempC:    _state.WaterTempC,
+                        Slots:         slots,
+                        SlotsLabel:    string.Join(", ", slots.Select(s => s.Label)));
+
+                    try
+                    {
+                        await _mqtt.PublishAsync(
+                            $"{_cfg.MqttPrefix}/schedule",
+                            System.Text.Json.JsonSerializer.Serialize(payload,
+                                PiscineController.Config.AppJsonContext.Default.SchedulePayload),
+                            retain: true, ct: ct);
+                    }
+                    catch (Exception ex)
+                    { _logger.LogError(ex, "FiltrationService: échec publication planning MQTT"); }
                 }
 
                 bool shouldRun = _filtration.ShouldPumpRun();

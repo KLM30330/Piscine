@@ -131,6 +131,7 @@ var host = Host.CreateDefaultBuilder(args)
             sp.GetRequiredService<PoolState>(),
             sp.GetRequiredService<FiltrationManager>(),
             sp.GetRequiredService<Wk600Drive>(),
+            sp.GetRequiredService<MqttService>(),
             sp.GetRequiredService<ILogger<FiltrationService>>()));
         services.AddHostedService(sp => new SensorService(
             sp.GetRequiredService<PoolConfig>(),

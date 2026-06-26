@@ -7,6 +7,8 @@ namespace PiscineController.Config;
 [JsonSerializable(typeof(SensorPayload))]
 [JsonSerializable(typeof(DriveStatusPayload))]
 [JsonSerializable(typeof(HealthPayload))]
+[JsonSerializable(typeof(SchedulePayload))]
+[JsonSerializable(typeof(List<ScheduleSlot>))]
 [JsonSerializable(typeof(HaDiscoveryPayload))]
 [JsonSerializable(typeof(HaBinaryDiscoveryPayload))]
 [JsonSerializable(typeof(HaSwitchDiscoveryPayload))]
@@ -32,6 +34,20 @@ public sealed record DriveStatusPayload(
 public sealed record HealthPayload(
     bool I2cProblem, bool OneWireProblem, bool Rs485Problem,
     string I2cLastError, string OneWireLastError, string Rs485LastError);
+
+// Planning de filtration journalier publié sur pool/schedule après chaque
+// rebuild. StartH/EndH = heures décimales (ex. 8.5 = 08h30). Label = texte
+// lisible "08h30–10h00" pour l'affichage direct dans HA ou le panneau tactile.
+public sealed record ScheduleSlot(
+    [property: JsonPropertyName("start_h")]  double StartH,
+    [property: JsonPropertyName("end_h")]    double EndH,
+    [property: JsonPropertyName("label")]    string Label);
+
+public sealed record SchedulePayload(
+    [property: JsonPropertyName("required_hours")]  double RequiredHours,
+    [property: JsonPropertyName("water_temp_c")]    double WaterTempC,
+    [property: JsonPropertyName("slots")]           List<ScheduleSlot> Slots,
+    [property: JsonPropertyName("slots_label")]     string SlotsLabel);
 
 public sealed record HaDeviceInfo(
     [property: JsonPropertyName("identifiers")]  string[] Identifiers,
