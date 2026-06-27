@@ -105,10 +105,11 @@ public sealed class FiltrationManager
     {
         _mode = modeStr.ToLowerInvariant() switch
         {
-            "auto"   => FilterMode.Auto,
-            "forced" => FilterMode.Forced,
-            "pause"  => FilterMode.Pause,
-            "stop"   => FilterMode.Stop,
+            "auto"    => FilterMode.Auto,
+            "forced"  => FilterMode.Forced,
+            "rescue"  => FilterMode.Rescue,
+            "pause"   => FilterMode.Pause,
+            "stop"    => FilterMode.Stop,
             _ => _mode
         };
         if (freqHz.HasValue)
@@ -119,10 +120,13 @@ public sealed class FiltrationManager
 
     public bool ShouldPumpRun() => _mode switch
     {
-        FilterMode.Auto   => InSchedule(),
-        FilterMode.Forced => true,
-        FilterMode.Pause  => false,
-        FilterMode.Stop   => false,
+        FilterMode.Auto    => InSchedule(),
+        FilterMode.Forced  => true,
+        // En mode secours, la pompe est alimentée directement par relais PCF
+        // (sans variateur) : le variateur doit rester ARRÊTÉ.
+        FilterMode.Rescue  => false,
+        FilterMode.Pause   => false,
+        FilterMode.Stop    => false,
         _ => false
     };
 

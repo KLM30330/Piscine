@@ -157,6 +157,13 @@ var host = Host.CreateDefaultBuilder(args)
             sp.GetRequiredService<EquipmentHealth>(),
             sp.GetRequiredService<MqttService>(),
             sp.GetRequiredService<ILogger<HealthService>>()));
+        services.AddHostedService(sp => new RescueService(
+            sp.GetRequiredService<PoolConfig>(),
+            sp.GetRequiredService<PoolState>(),
+            sp.GetRequiredService<Pcf8574>(),
+            sp.GetRequiredService<Wk600Drive>(),
+            sp.GetRequiredService<MqttService>(),
+            sp.GetRequiredService<ILogger<RescueService>>()));
     })
     .Build();
 

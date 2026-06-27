@@ -67,9 +67,10 @@ public class FiltrationManagerTests
     }
 
     [Theory]
-    [InlineData("forced", true)]
-    [InlineData("pause",  false)]
-    [InlineData("stop",   false)]
+    [InlineData("forced",  true)]
+    [InlineData("rescue",  false)]  // VFD arrêté — pompe alimentée via relais direct
+    [InlineData("pause",   false)]
+    [InlineData("stop",    false)]
     public void ShouldPumpRun_ByMode(string mode, bool expected)
     {
         var mgr = new FiltrationManager(Cfg());

@@ -1,6 +1,6 @@
 namespace PiscineController.Filtration;
 
-public enum FilterMode { Auto, Forced, Pause, Stop }
+public enum FilterMode { Auto, Forced, Rescue, Pause, Stop }
 
 public enum WaterState
 {

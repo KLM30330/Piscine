@@ -18,6 +18,9 @@ public sealed class PoolConfig
     public int AtlasRtdAddr { get; set; } = 0x66;
     public int AtlasPmpAddr { get; set; } = 0x67;
     public int Pcf8574Addr { get; set; } = 0x20;
+    // Sortie n°2 du PCF8574 (index 1, la n°1 étant l'électrolyseur sur index 0)
+    // utilisée pour alimenter la pompe directement en mode secours, sans variateur.
+    public int RescuePumpRelayPin { get; set; } = 1;
     public int LcdI2cAddr { get; set; } = 0x27;
 
     // 1-Wire DS18B20

@@ -169,6 +169,11 @@ public sealed class MqttService : BackgroundService
                     _filtration.SetMode(payload);
                     _state.FilterMode = Enum.Parse<FilterMode>(char.ToUpper(payload[0]) + payload[1..]);
                     break;
+                case "rescue":
+                    // Raccourci dédié : ON → mode secours, OFF → retour auto
+                    _filtration.SetMode(payload == "ON" ? "rescue" : "auto");
+                    _state.FilterMode = payload == "ON" ? FilterMode.Rescue : FilterMode.Auto;
+                    break;
                 case "freq":
                     if (double.TryParse(payload, System.Globalization.CultureInfo.InvariantCulture, out double hz))
                         _filtration.SetMode("forced", hz);
@@ -354,17 +359,20 @@ public sealed class MqttService : BackgroundService
         await BinarySensor("electrolyzer_running", "Electrolyseur en fonctionnement",
             null, "running", topicOverride: $"{dev}/electrolyzer/state");
 
-        // ── Modes de filtration (topic commande: {prefix}/cmd/mode, partagé
-        // entre les 3 switches ; état lu depuis le topic filter_mode, publié
-        // immédiatement par MqttService.OnFilterModeChanged — pas via le
-        // cycle SensorPayload périodique, pour une mise à jour sans latence
-        // perceptible côté HA). Mode boost retiré.
+        // ── Modes de filtration ───────────────────────────────────────────────
         await Switch("mode_auto",   "Mode filtration auto",    "mode", "auto",   "auto",
             topicOverride: $"{dev}/filter_mode", stateValue: "Auto");
         await Switch("mode_forced", "Mode filtration forcée",  "mode", "forced", "auto",
             topicOverride: $"{dev}/filter_mode", stateValue: "Forced");
         await Switch("mode_stop",   "Arrêt filtration",        "mode", "stop",   "auto",
             topicOverride: $"{dev}/filter_mode", stateValue: "Stop");
+
+        // ── Mode secours : pompe alimentée directement via relais PCF, sans
+        // variateur. Switch dédié cmd/rescue (ON/OFF) pour éviter toute
+        // confusion avec les autres modes. État réel publié par RescueService
+        // sur rescue/state — jamais optimiste.
+        await Switch("mode_rescue", "Mode secours (relais direct)",
+            "rescue", "ON", "OFF", topicOverride: $"{dev}/rescue/state");
 
         // ── Électrolyseur : contrôle manuel (en plus du suivi automatique de
         // la pompe). État réel déjà publié par ElectrolyzerService sur
