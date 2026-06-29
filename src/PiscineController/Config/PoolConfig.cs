@@ -85,4 +85,9 @@ public sealed class PoolConfig
     // LCD
     public int LcdDisplayDuration { get; set; } = 30;
     public int LcdBacklightTimeout { get; set; } = 60;
+
+    // Santé équipements : nombre de défauts consécutifs avant alerte MQTT/log.
+    // Évite les fausses alertes sur erreurs transitoires (démarrage, glitch
+    // ponctuel). Avec 3 et un cycle de 5s → alerte après ~15s de panne réelle.
+    public int HealthFailureThreshold { get; set; } = 3;
 }

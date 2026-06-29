@@ -26,7 +26,9 @@ var host = Host.CreateDefaultBuilder(args)
 
         services.AddSingleton(poolConfig);
         services.AddSingleton(_ => new PoolState());
-        services.AddSingleton(sp => new EquipmentHealth(sp.GetRequiredService<ILogger<EquipmentHealth>>()));
+        services.AddSingleton(sp => new EquipmentHealth(
+            sp.GetRequiredService<ILogger<EquipmentHealth>>(),
+            sp.GetRequiredService<PoolConfig>().HealthFailureThreshold));
 
         // Hardware (singletons)
         services.AddSingleton(sp =>
