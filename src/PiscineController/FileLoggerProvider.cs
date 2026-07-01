@@ -25,7 +25,8 @@ public sealed class FileLoggerProvider : ILoggerProvider
         _directory = directory;
         _minLevel = minLevel;
         _retentionDays = retentionDays;
-        Directory.CreateDirectory(_directory);
+        try { Directory.CreateDirectory(_directory); }
+        catch { /* si le dossier ne peut pas être créé, les logs fichier sont simplement désactivés */ }
         PurgeOldFiles();
     }
 
@@ -54,14 +55,19 @@ public sealed class FileLoggerProvider : ILoggerProvider
             {
                 _writer?.Flush();
                 _writer?.Dispose();
+                _writer = null;
                 _currentFile = expectedFile;
-                _writer = new StreamWriter(
-                    new FileStream(expectedFile, FileMode.Append, FileAccess.Write, FileShare.Read))
-                { AutoFlush = true };
+                try
+                {
+                    _writer = new StreamWriter(
+                        new FileStream(expectedFile, FileMode.Append, FileAccess.Write, FileShare.Read))
+                    { AutoFlush = true };
+                }
+                catch { /* dossier inaccessible : on désactive silencieusement */ return; }
                 PurgeOldFiles();
             }
-            try { _writer!.WriteLine(line); }
-            catch { /* best-effort : un échec d'écriture fichier ne doit jamais planter le service */ }
+            try { _writer?.WriteLine(line); }
+            catch { /* best-effort */ }
         }
     }
 

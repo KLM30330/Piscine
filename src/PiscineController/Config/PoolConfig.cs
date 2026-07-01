@@ -94,6 +94,6 @@ public sealed class PoolConfig
     // Logs fichier (en plus de journalctl/console) — un fichier par jour,
     // purgé automatiquement après LogRetentionDays. Récupérables aussi via
     // MQTT cmd/logs (voir MqttService), sans avoir besoin de SSH.
-    public string LogDirectory { get; set; } = "/opt/piscine/logs";
+    public string LogDirectory { get; set; } = "logs";
     public int LogRetentionDays { get; set; } = 7;
 }
