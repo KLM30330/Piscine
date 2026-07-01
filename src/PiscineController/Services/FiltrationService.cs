@@ -60,7 +60,7 @@ public sealed class FiltrationService : BackgroundService
                     // Conversion en format lisible hh:mm–hh:mm pour HA et panneau tactile
                     static string ToHM(double h)
                     {
-                        int hh = (int)h % 24;
+                        int hh = (int)Math.Floor(h);   // pas de % 24 : 24h00 = fin de journée
                         int mm = (int)Math.Round((h - Math.Floor(h)) * 60);
                         if (mm == 60) { hh++; mm = 0; }
                         return $"{hh:D2}h{mm:D2}";
