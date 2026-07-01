@@ -12,15 +12,31 @@ using PiscineController.Services;
 // Forcer le répertoire courant = dossier du binaire
 Directory.SetCurrentDirectory(AppContext.BaseDirectory);
 
+// Lu en amont, avant la construction du host, car ConfigureLogging a besoin
+// du chemin/rétention pour brancher FileLoggerProvider — léger doublon de
+// lecture de configuration (le host la relit ensuite normalement), mais
+// évite de complexifier l'ordre d'initialisation pour 2 valeurs.
+var preConfig = new ConfigurationBuilder()
+    .SetBasePath(AppContext.BaseDirectory)
+    .AddJsonFile("appsettings.json", optional: false)
+    .Build();
+string logDirectory   = preConfig["Pool:LogDirectory"]   ?? "/opt/piscine/logs";
+int    logRetentionDays = int.TryParse(preConfig["Pool:LogRetentionDays"], out int rd) ? rd : 7;
+
+var fileLoggerProvider = new FileLoggerProvider(logDirectory, LogLevel.Information, logRetentionDays);
+
 var host = Host.CreateDefaultBuilder(args)
     .ConfigureLogging(logging =>
     {
         logging.ClearProviders();
         logging.AddConsole();
+        logging.AddProvider(fileLoggerProvider);
         logging.SetMinimumLevel(LogLevel.Information);
     })
     .ConfigureServices((ctx, services) =>
     {
+        services.AddSingleton(fileLoggerProvider);
+
         var poolConfig = new PoolConfig();
         ctx.Configuration.GetSection("Pool").Bind(poolConfig);
 
@@ -106,6 +122,7 @@ var host = Host.CreateDefaultBuilder(args)
             sp.GetRequiredService<EzoPh>(),
             sp.GetRequiredService<Wk600Drive>(),
             sp.GetRequiredService<PumpPrimingService>(),
+            sp.GetRequiredService<FileLoggerProvider>(),
             sp.GetRequiredService<ILogger<MqttService>>()));
         services.AddHostedService(sp => sp.GetRequiredService<MqttService>());
 

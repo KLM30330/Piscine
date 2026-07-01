@@ -90,4 +90,10 @@ public sealed class PoolConfig
     // Évite les fausses alertes sur erreurs transitoires (démarrage, glitch
     // ponctuel). Avec 3 et un cycle de 5s → alerte après ~15s de panne réelle.
     public int HealthFailureThreshold { get; set; } = 3;
+
+    // Logs fichier (en plus de journalctl/console) — un fichier par jour,
+    // purgé automatiquement après LogRetentionDays. Récupérables aussi via
+    // MQTT cmd/logs (voir MqttService), sans avoir besoin de SSH.
+    public string LogDirectory { get; set; } = "/opt/piscine/logs";
+    public int LogRetentionDays { get; set; } = 7;
 }

@@ -20,6 +20,7 @@ public sealed class MqttService : BackgroundService
     private readonly EzoPh _ph;
     private readonly Wk600Drive _drive;
     private readonly PumpPrimingService _priming;
+    private readonly FileLoggerProvider _fileLogger;
     private readonly ILogger<MqttService> _logger;
     private IMqttClient? _client;
 
@@ -32,11 +33,13 @@ public sealed class MqttService : BackgroundService
 
     public MqttService(PoolConfig cfg, PoolState state,
         FiltrationManager filtration, PhPidController pid,
-        EzoPh ph, Wk600Drive drive, PumpPrimingService priming, ILogger<MqttService> logger)
+        EzoPh ph, Wk600Drive drive, PumpPrimingService priming,
+        FileLoggerProvider fileLogger, ILogger<MqttService> logger)
     {
         _cfg = cfg; _state = state;
         _filtration = filtration; _pid = pid;
-        _ph = ph; _drive = drive; _priming = priming; _logger = logger;
+        _ph = ph; _drive = drive; _priming = priming;
+        _fileLogger = fileLogger; _logger = logger;
         _priming.StateChanged += OnPrimingStateChanged;
         _state.FilterModeChanged += OnFilterModeChanged;
     }
@@ -203,9 +206,44 @@ public sealed class MqttService : BackgroundService
                         await PublishAsync($"{_cfg.MqttPrefix}/action/resetting_fault", "OFF");
                     }
                     break;
+                case "logs":
+                    if (payload != "0") await PublishLogsAsync(payload);
+                    break;
             }
         }
         catch (Exception ex) { _logger.LogError(ex, "Erreur traitement commande {Cmd}", cmd); }
+    }
+
+    // Publie les N dernières lignes du fichier de log du jour sur
+    // {prefix}/logs/chunk/{i}, en plusieurs morceaux pour rester dans des
+    // tailles de payload MQTT raisonnables (la plupart des brokers limitent
+    // autour de 256 Ko, mais certains clients/dashboards HA affichent mal de
+    // très longs textes — on découpe par lots de 30 lignes). payload =
+    // nombre de lignes demandées en texte (ex. "200"), défaut 100 si vide
+    // ou invalide. Un message {prefix}/logs/meta précède l'envoi avec le
+    // nombre total de morceaux, pour que l'abonné sache combien attendre.
+    private const int LogLinesPerChunk = 30;
+
+    private async Task PublishLogsAsync(string payload)
+    {
+        int n = int.TryParse(payload, out int requested) && requested > 0 ? requested : 100;
+        n = Math.Min(n, 2000);   // garde-fou : pas plus de 2000 lignes d'un coup
+
+        string path = _fileLogger.CurrentLogFilePath;
+        var lines = FileLogReader.TailLines(path, n);
+
+        int chunkCount = lines.Count == 0 ? 0 : (lines.Count + LogLinesPerChunk - 1) / LogLinesPerChunk;
+        await PublishAsync($"{_cfg.MqttPrefix}/logs/meta",
+            $"{{\"file\":\"{Path.GetFileName(path)}\",\"lines\":{lines.Count},\"chunks\":{chunkCount}}}");
+
+        for (int i = 0; i < chunkCount; i++)
+        {
+            var chunk = lines.Skip(i * LogLinesPerChunk).Take(LogLinesPerChunk);
+            await PublishAsync($"{_cfg.MqttPrefix}/logs/chunk/{i}", string.Join('\n', chunk));
+        }
+
+        _logger.LogInformation("Logs publiés via MQTT: {Lines} lignes, {Chunks} morceau(x)",
+            lines.Count, chunkCount);
     }
 
     private async Task PublishHaDiscovery(CancellationToken ct)
@@ -395,6 +433,13 @@ public sealed class MqttService : BackgroundService
         // ── Étalonnage pH (point milieu, solution tampon PhCalMidValue) ────────
         await Switch("calibrate_ph_mid", "Étalonnage pH milieu",
             "calibrate_mid", "ON", "OFF", topicOverride: $"{dev}/action/calibrating");
+
+        // ── Récupération des logs : action ponctuelle, publie les 200
+        // dernières lignes du fichier de log du jour sur {prefix}/logs/*.
+        // Consultable directement via mosquitto_sub, ou via une carte
+        // Markdown HA abonnée à {prefix}/logs/chunk/0 (etc.).
+        await Switch("fetch_logs", "Récupérer les logs",
+            "logs", "200", "0");
 
         // ── Réinitialisation défaut variateur : action ponctuelle. Vérifiez
         // que la cause du défaut a bien disparu (ex. moteur refroidi pour le
