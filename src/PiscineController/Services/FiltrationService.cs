@@ -15,6 +15,15 @@ public sealed class FiltrationService : BackgroundService
     private readonly MqttService _mqtt;
     private readonly ILogger<FiltrationService> _logger;
 
+    // ── Chrono de filtration journalier ──────────────────────────────────────
+    // Horodatage précis (pas un compteur de cycles) pour éviter que les
+    // variations de durée de cycle (retry Modbus, délai I2C) ne biaisent
+    // l'accumulation. Réinitialisation automatique à minuit.
+    private DateTimeOffset? _pumpOnSince;
+    private double          _elapsedTodaySec;
+    private int             _currentDay = -1;
+    private DateTimeOffset  _lastElapsedPublish = DateTimeOffset.MinValue;
+
     public FiltrationService(PoolConfig cfg, PoolState state,
         FiltrationManager filtration, Wk600Drive drive,
         MqttService mqtt, ILogger<FiltrationService> logger)
@@ -90,6 +99,53 @@ public sealed class FiltrationService : BackgroundService
 
                 bool shouldRun = _filtration.ShouldPumpRun();
                 double targetFreq = _filtration.GetRunFreq();
+
+                // ── Chrono filtration journalier ──────────────────────────────
+                var now   = DateTimeOffset.Now;
+                int today = now.DayOfYear;
+
+                if (today != _currentDay)
+                {
+                    // Minuit : fermer le créneau en cours avant reset
+                    if (_pumpOnSince.HasValue)
+                        _elapsedTodaySec += (now - _pumpOnSince.Value).TotalSeconds;
+                    _elapsedTodaySec = 0;
+                    _pumpOnSince     = (_drive.IsRunning || _filtration.Mode == FilterMode.Rescue) ? now : null;
+                    _currentDay      = today;
+                    _logger.LogInformation("Chrono filtration remis à zéro (nouveau jour)");
+                }
+
+                bool pumpIsOn = _drive.IsRunning || _filtration.Mode == FilterMode.Rescue;
+
+                if (pumpIsOn && !_pumpOnSince.HasValue)
+                    _pumpOnSince = now;
+                else if (!pumpIsOn && _pumpOnSince.HasValue)
+                {
+                    _elapsedTodaySec += (now - _pumpOnSince.Value).TotalSeconds;
+                    _pumpOnSince      = null;
+                }
+
+                double elapsedSec  = _elapsedTodaySec
+                    + (_pumpOnSince.HasValue ? (now - _pumpOnSince.Value).TotalSeconds : 0);
+                double elapsedH    = Math.Round(elapsedSec / 3600.0, 2);
+                double requiredH   = _filtration.CurrentRequiredHours;
+                double remainingH  = Math.Max(0, Math.Round(requiredH - elapsedH, 2));
+
+                // Publication toutes les 30s (valeur qui change lentement)
+                if ((now - _lastElapsedPublish).TotalSeconds >= 30)
+                {
+                    _lastElapsedPublish = now;
+                    try
+                    {
+                        await _mqtt.PublishAsync(
+                            $"{_cfg.MqttPrefix}/filtration/elapsed",
+                            $"{{\"elapsed_h\":{elapsedH},\"remaining_h\":{remainingH}," +
+                            $"\"required_h\":{requiredH:F1},\"pump_on\":{pumpIsOn.ToString().ToLower()}}}",
+                            retain: true, ct: ct);
+                    }
+                    catch (Exception ex)
+                    { _logger.LogError(ex, "FiltrationService: échec publication temps écoulé"); }
+                }
 
                 if (shouldRun && !_drive.IsRunning)
                 {

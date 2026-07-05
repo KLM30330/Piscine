@@ -463,6 +463,15 @@ public sealed class MqttService : BackgroundService
             "required_hours", "h", "duration", "schedule");
         await Sensor("filtration_slots",  "Créneaux de filtration",
             "slots_label", "", null, "schedule");
+
+        // ── Chrono filtration (topic {prefix}/filtration/elapsed, publié
+        // toutes les 30s par FiltrationService, reset à minuit) ───────────────
+        await Sensor("filtration_elapsed",   "Filtration écoulée aujourd'hui",
+            "elapsed_h",   "h", "duration", "filtration/elapsed");
+        await Sensor("filtration_remaining", "Filtration restante aujourd'hui",
+            "remaining_h", "h", "duration", "filtration/elapsed");
+        await BinarySensor("filtration_pump_on", "Pompe en filtration",
+            "pump_on", "running", "filtration/elapsed");
     }
 
     public override async Task StopAsync(CancellationToken ct)
