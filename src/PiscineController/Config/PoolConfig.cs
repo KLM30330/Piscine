@@ -27,7 +27,6 @@ public sealed class PoolConfig
     public double PumpTempAlertC { get; set; } = 60.0;
     public double PumpTempCriticalC { get; set; } = 70.0;
 
-    // GPIO boutons (BCM)
 
     // Modbus WK600-D
     public string ModbusPort { get; set; } = "/dev/ttyUSB0";
@@ -77,7 +76,6 @@ public sealed class PoolConfig
     public double PhCalMidValue { get; set; } = 7.0;
     public double PrimeVolumeMl { get; set; } = 20.0;
 
-    // LCD
 
     // Santé équipements : nombre de défauts consécutifs avant alerte MQTT/log.
     // Évite les fausses alertes sur erreurs transitoires (démarrage, glitch

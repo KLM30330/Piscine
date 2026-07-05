@@ -49,7 +49,13 @@ public sealed class PumpTempService : BackgroundService
                         ct);
 
                     if (tempC >= _cfg.PumpTempCriticalC)
-                        _logger.LogCritical("Température pompe CRITIQUE: {T}°C — arrêt requis", tempC);
+                    {
+                        _logger.LogCritical(
+                            "Température pompe CRITIQUE: {T}°C — arrêt d'urgence de la filtration", tempC);
+                        // Arrêt de sécurité : on passe en mode Stop pour protéger
+                        // la pompe. L'opérateur doit relancer manuellement depuis HA.
+                        _state.FilterMode = PiscineController.Filtration.FilterMode.Stop;
+                    }
                     else if (tempC >= _cfg.PumpTempAlertC)
                         _logger.LogWarning("Température pompe élevée: {T}°C", tempC);
 

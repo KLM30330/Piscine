@@ -170,7 +170,7 @@ public sealed class MqttService : BackgroundService
             {
                 case "mode":
                     _filtration.SetMode(payload);
-                    _state.FilterMode = Enum.Parse<FilterMode>(char.ToUpper(payload[0]) + payload[1..]);
+                    _state.FilterMode = payload.Length > 0 && Enum.TryParse<FilterMode>(char.ToUpper(payload[0]) + payload[1..], out var fm) ? fm : _state.FilterMode;
                     break;
                 case "rescue":
                     // Raccourci dédié : ON → mode secours, OFF → retour auto

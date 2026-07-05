@@ -45,7 +45,7 @@ public sealed class HealthService : BackgroundService
             catch (Exception ex) when (!ct.IsCancellationRequested)
             { _logger.LogError(ex, "HealthService: erreur publication"); }
 
-            await Task.Delay(TimeSpan.FromSeconds(5), ct).ConfigureAwait(false);
+            await Task.Delay(TimeSpan.FromSeconds(30), ct).ConfigureAwait(false);
         }
     }
 }

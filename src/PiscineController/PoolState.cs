@@ -1,4 +1,3 @@
-using PiscineController.Config;
 using PiscineController.Filtration;
 
 namespace PiscineController;
@@ -9,17 +8,18 @@ public sealed class PoolState
     private double _phValue;
     private double _orpMv;
     private double _pumpFreqHz;
-    private int _filterMode;
-    private int _pumpRunning;
-    private int _electrolyzerRunning;
-    private int _electrolyzerEnabled = 1;   // activé par défaut (suit la pompe)
+    private int    _filterMode;
+    private int    _pumpRunning;
+    private int    _electrolyzerRunning;
+    private int    _electrolyzerEnabled = 1;  // activé par défaut
 
-    // Déclenchés uniquement sur changement réel (pas à chaque écriture), pour
-    // permettre une publication MQTT immédiate au lieu d'attendre le prochain
-    // cycle périodique (jusqu'à 60s pour FilterMode via SensorService, 5s pour
-    // l'électrolyseur) — la latence perçue côté switch HA vient de là.
+    // Événements sur changement réel (pas à chaque écriture) pour
+    // publication MQTT immédiate sans attendre le prochain cycle.
     public event Action<FilterMode>? FilterModeChanged;
-    public event Action<bool>? ElectrolyzerEnabledChanged;
+    public event Action<bool>?       ElectrolyzerEnabledChanged;
+    // Permet à ElectrolyzerService de couper le relais immédiatement
+    // quand la pompe s'arrête, sans attendre son cycle de 5s.
+    public event Action<bool>?       PumpRunningChanged;
 
     public double WaterTempC
     {
@@ -53,7 +53,12 @@ public sealed class PoolState
     public bool PumpRunning
     {
         get => Volatile.Read(ref _pumpRunning) == 1;
-        set => Volatile.Write(ref _pumpRunning, value ? 1 : 0);
+        set
+        {
+            int newVal = value ? 1 : 0;
+            int old    = Interlocked.Exchange(ref _pumpRunning, newVal);
+            if (old != newVal) PumpRunningChanged?.Invoke(value);
+        }
     }
     public bool ElectrolyzerRunning
     {
@@ -66,16 +71,8 @@ public sealed class PoolState
         set
         {
             int newVal = value ? 1 : 0;
-            int old = Interlocked.Exchange(ref _electrolyzerEnabled, newVal);
+            int old    = Interlocked.Exchange(ref _electrolyzerEnabled, newVal);
             if (old != newVal) ElectrolyzerEnabledChanged?.Invoke(value);
         }
-    }
-
-    private readonly object _driveLock = new();
-    private DriveStatusPayload? _driveStatus;
-    public DriveStatusPayload? DriveStatus
-    {
-        get { lock (_driveLock) return _driveStatus; }
-        set { lock (_driveLock) _driveStatus = value; }
     }
 }

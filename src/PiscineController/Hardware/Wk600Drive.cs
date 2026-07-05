@@ -47,7 +47,7 @@ public sealed class Wk600Drive : IDisposable
     //   U0-01 0x7001 : Set frequency           × 0.01 Hz   (consigne, PAS le courant)
     //   U0-02 0x7002 : Bus voltage             × 0.1 V     (PAS la tension de sortie)
     //   U0-03 0x7003 : Output voltage          × 1 V
-    //   U0-04 0x7004 : Output current          × 0.01 A    (PAS × 0.1 !)
+    //   U0-04 0x7004 : Output current          × 0.1 A
     //   U0-05 0x7005 : Output power             × 0.1 kW
     //
     // Bloc B : 0x703D-0x703E (2 registres)
@@ -380,7 +380,7 @@ public sealed class Wk600Drive : IDisposable
             SetpointFreqHz = a[1] * 0.01, // U0-01 : fréquence consigne (0.01 Hz)
             DcBusV       = a[2] * 0.1,    // U0-02 : tension bus DC     (0.1 V)
             OutVoltageV  = a[3],           // U0-03 : tension sortie     (1 V)
-            OutCurrentA  = a[4] * 0.1,   // U0-04 : courant sortie     (0.01 A)
+            OutCurrentA  = a[4] * 0.1,   // U0-04 : courant sortie     (0.1 A)
             OutPowerKw   = a[5] * 10,    // U0-05 : puissance sortie   (0.1 kW)
             IsRunning    = isRunning,       // U0-61
 

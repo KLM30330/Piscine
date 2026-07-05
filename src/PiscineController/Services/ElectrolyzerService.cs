@@ -27,6 +27,7 @@ public sealed class ElectrolyzerService : BackgroundService
         // déjà de PoolState, pas l'inverse). On réagit immédiatement à un
         // changement plutôt que d'attendre le prochain cycle de 5s.
         _state.ElectrolyzerEnabledChanged += enabled => { _ = ApplyAndPublishNowAsync(); };
+        _state.PumpRunningChanged       += running => { _ = ApplyAndPublishNowAsync(); };
     }
 
     private async Task ApplyAndPublishNowAsync()
