@@ -80,37 +80,20 @@ var host = Host.CreateDefaultBuilder(args)
         services.AddSingleton(sp =>
         {
             var cfg = sp.GetRequiredService<PoolConfig>();
-            return new Lcd1602(cfg.I2cBus, cfg.LcdI2cAddr, sp.GetRequiredService<EquipmentHealth>());
-        });
-        services.AddSingleton(sp =>
-        {
-            var cfg = sp.GetRequiredService<PoolConfig>();
             return new Ds18b20(sp.GetRequiredService<ILogger<Ds18b20>>(),
                 sp.GetRequiredService<EquipmentHealth>(), cfg.OnewirePumpSensorId);
         });
         services.AddSingleton(sp =>
             new Wk600Drive(sp.GetRequiredService<PoolConfig>(),
                 sp.GetRequiredService<ILogger<Wk600Drive>>(), sp.GetRequiredService<EquipmentHealth>()));
-        services.AddSingleton(sp =>
-            new GpioButtons(sp.GetRequiredService<PoolConfig>(), sp.GetRequiredService<ILogger<GpioButtons>>()));
 
         // Logique pure
         services.AddSingleton(sp => new FiltrationManager(sp.GetRequiredService<PoolConfig>()));
         services.AddSingleton(sp => new PhPidController(sp.GetRequiredService<PoolConfig>()));
 
-        // DisplayService — singleton pour que ButtonService puisse le résoudre directement
-        services.AddSingleton(sp => new DisplayService(
-            sp.GetRequiredService<Lcd1602>(),
-            sp.GetRequiredService<PoolConfig>(),
-            sp.GetRequiredService<ILogger<DisplayService>>()));
-        services.AddHostedService(sp => sp.GetRequiredService<DisplayService>());
-
-        // PumpPrimingService — singleton partagé entre ButtonService (bouton
-        // physique) et MqttService (commande HA), pour un seul verrou anti-
-        // double-déclenchement commun aux deux.
+        // PumpPrimingService — singleton partagé, verrou anti-double-déclenchement
         services.AddSingleton(sp => new PumpPrimingService(
             sp.GetRequiredService<EzoPmp>(),
-            sp.GetRequiredService<DisplayService>(),
             sp.GetRequiredService<ILogger<PumpPrimingService>>()));
 
         // MqttService — singleton pour que DriveService/PumpTempService/SensorService le résolvent
@@ -163,14 +146,6 @@ var host = Host.CreateDefaultBuilder(args)
             sp.GetRequiredService<PhPidController>(),
             sp.GetRequiredService<MqttService>(),
             sp.GetRequiredService<ILogger<SensorService>>()));
-        services.AddHostedService(sp => new ButtonService(
-            sp.GetRequiredService<PoolConfig>(),
-            sp.GetRequiredService<PoolState>(),
-            sp.GetRequiredService<GpioButtons>(),
-            sp.GetRequiredService<FiltrationManager>(),
-            sp.GetRequiredService<PumpPrimingService>(),
-            sp.GetRequiredService<DisplayService>(),
-            sp.GetRequiredService<ILogger<ButtonService>>()));
         services.AddHostedService(sp => new HealthService(
             sp.GetRequiredService<PoolConfig>(),
             sp.GetRequiredService<EquipmentHealth>(),

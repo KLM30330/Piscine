@@ -21,7 +21,6 @@ public sealed class PoolConfig
     // Sortie n°2 du PCF8574 (index 1, la n°1 étant l'électrolyseur sur index 0)
     // utilisée pour alimenter la pompe directement en mode secours, sans variateur.
     public int RescuePumpRelayPin { get; set; } = 1;
-    public int LcdI2cAddr { get; set; } = 0x27;
 
     // 1-Wire DS18B20
     public string? OnewirePumpSensorId { get; set; } = "28-0103804a321b";
@@ -29,10 +28,6 @@ public sealed class PoolConfig
     public double PumpTempCriticalC { get; set; } = 70.0;
 
     // GPIO boutons (BCM)
-    public int BtnLcdDisplay { get; set; } = 5;
-    public int BtnPrimePump { get; set; } = 6;
-    public int BtnPauseFilter { get; set; } = 13;
-    public int BtnResumeFilter { get; set; } = 19;
 
     // Modbus WK600-D
     public string ModbusPort { get; set; } = "/dev/ttyUSB0";
@@ -83,8 +78,6 @@ public sealed class PoolConfig
     public double PrimeVolumeMl { get; set; } = 20.0;
 
     // LCD
-    public int LcdDisplayDuration { get; set; } = 30;
-    public int LcdBacklightTimeout { get; set; } = 60;
 
     // Santé équipements : nombre de défauts consécutifs avant alerte MQTT/log.
     // Évite les fausses alertes sur erreurs transitoires (démarrage, glitch
