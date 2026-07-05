@@ -3,415 +3,1176 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=1024, height=600, user-scalable=no">
-<title>Piscine — Panneau de contrôle</title>
+<title>Piscine</title>
 <script src="https://unpkg.com/mqtt@5/dist/mqtt.min.js"></script>
+<script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&family=Nunito+Sans:wght@400;600&display=swap" rel="stylesheet">
 <style>
-/* ============================================================
-   PISCINE — panneau de contrôle tactile
-   Identité : panneau d'instruments marine/piscine — fond teal
-   profond évoquant l'eau la nuit, lectures en monospace comme
-   de vrais afficheurs d'équipement, accent aqua pour le nominal,
-   ambre/corail pour alerte/défaut. Signature : le sélecteur de
-   mode façon commutateur rotatif à curseur glissant.
-   ============================================================ */
-:root{
-  --bg:#0a1a1f; --panel:#0f242b; --panel-raised:#15323b;
-  --border:#1d3940; --text:#e6f2f1; --text-dim:#6f8f95;
-  --accent:#3fd0c9; --accent-dim:rgba(63,208,201,.14);
-  --warn:#e8a33d; --warn-dim:rgba(232,163,61,.14);
-  --danger:#e8553d; --danger-dim:rgba(232,85,61,.16);
-  --mono:ui-monospace,'Cascadia Code','JetBrains Mono','SF Mono',Menlo,Consolas,monospace;
-  --sans:-apple-system,'Segoe UI',Roboto,system-ui,sans-serif;
-  --radius:10px;
+:root {
+  --bg:       #f0f6ff;
+  --card:     #ffffff;
+  --card2:    #f8fbff;
+  --border:   rgba(0,0,0,.06);
+  --shadow:   0 2px 12px rgba(60,100,180,.08), 0 1px 3px rgba(0,0,0,.06);
+  --shadow-lg:0 8px 24px rgba(60,100,180,.12), 0 2px 6px rgba(0,0,0,.07);
+
+  --blue:     #3b82f6;
+  --blue-lt:  #eff6ff;
+  --blue-med: #dbeafe;
+  --teal:     #0ea5e9;
+  --teal-lt:  #e0f2fe;
+  --green:    #10b981;
+  --green-lt: #d1fae5;
+  --amber:    #f59e0b;
+  --amber-lt: #fef3c7;
+  --red:      #ef4444;
+  --red-lt:   #fee2e2;
+  --purple:   #8b5cf6;
+  --purple-lt:#ede9fe;
+
+  --text:     #1e293b;
+  --text2:    #64748b;
+  --text3:    #94a3b8;
+
+  --radius:   18px;
+  --radius-sm:12px;
+  --sans: 'Nunito', system-ui, sans-serif;
+  --sans2:'Nunito Sans', system-ui, sans-serif;
 }
-*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;user-select:none;}
-html,body{margin:0;padding:0;width:1024px;height:600px;overflow:hidden;
-  background:var(--bg);color:var(--text);font-family:var(--sans);}
 
-/* ── En-tête ── */
-header{height:54px;display:flex;align-items:center;justify-content:space-between;
-  padding:0 18px;border-bottom:1px solid var(--border);}
-.brand{display:flex;align-items:center;gap:10px;}
-.brand .dot{width:9px;height:9px;border-radius:50%;background:var(--text-dim);
-  transition:background .3s,box-shadow .3s;}
-.brand .dot.live{background:var(--accent);box-shadow:0 0 8px var(--accent);}
-.brand .dot.down{background:var(--danger);box-shadow:0 0 8px var(--danger);}
-.brand b{font-family:var(--mono);letter-spacing:.18em;font-size:15px;font-weight:600;}
-.brand span{font-size:11px;color:var(--text-dim);}
-#clock{font-family:var(--mono);font-size:14px;color:var(--text-dim);}
+*, *::before, *::after {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+}
 
-/* ── Bandeau défaut variateur (masqué par défaut) ── */
-#faultBar{display:none;background:var(--danger-dim);color:var(--danger);
-  font-family:var(--mono);font-size:13px;padding:6px 18px;border-bottom:1px solid var(--border);}
-#faultBar.show{display:block;}
+html, body {
+  margin: 0; padding: 0;
+  width: 1024px; height: 600px;
+  overflow: hidden;
+  background: var(--bg);
+  font-family: var(--sans);
+  color: var(--text);
+}
 
-/* ── Corps ── */
-main{display:flex;height:calc(600px - 54px);}
-.col-instruments{flex:1.7;display:grid;grid-template-columns:1fr 1fr 1fr;
-  grid-template-rows:1fr 1fr;gap:10px;padding:12px;}
-.col-control{flex:1;display:flex;flex-direction:column;gap:10px;padding:12px 12px 12px 0;}
+#app { display: flex; flex-direction: column; height: 600px; }
 
-/* ── Cartes instrument ── */
-.card{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);
-  padding:10px 14px;display:flex;flex-direction:column;justify-content:center;position:relative;
-  transition:border-color .3s,background .3s;}
-.card .label{font-size:11px;color:var(--text-dim);letter-spacing:.04em;text-transform:uppercase;}
-.card .value{font-family:var(--mono);font-size:30px;font-weight:600;line-height:1.15;margin-top:2px;}
-.card .unit{font-size:14px;color:var(--text-dim);font-weight:400;margin-left:3px;}
-.card .sub{font-size:11px;margin-top:3px;color:var(--text-dim);}
-.card.state-warn{border-color:var(--warn);background:var(--warn-dim);}
-.card.state-warn .value{color:var(--warn);}
-.card.state-danger{border-color:var(--danger);background:var(--danger-dim);}
-.card.state-danger .value{color:var(--danger);}
-.card.state-good .sub{color:var(--accent);}
-.runlight{position:absolute;top:10px;right:12px;width:8px;height:8px;border-radius:50%;
-  background:var(--text-dim);}
-.runlight.on{background:var(--accent);box-shadow:0 0 6px var(--accent);}
+/* ══════════════════════════════════════════════════════
+   ONGLETS
+══════════════════════════════════════════════════════ */
+.tab-bar {
+  display: flex; gap: 0;
+  background: white;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  padding: 0 16px;
+}
 
-/* ── Sélecteur de mode (signature : commutateur à curseur glissant) ── */
-.modebox{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:12px;}
-.modebox .label{font-size:11px;color:var(--text-dim);letter-spacing:.04em;text-transform:uppercase;margin-bottom:8px;}
-.segmented{position:relative;display:grid;grid-template-columns:repeat(3,1fr);
-  background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:3px;height:46px;}
-.segmented .highlight{position:absolute;top:3px;left:3px;height:40px;
-  width:calc(33.333% - 4px);background:var(--accent-dim);border:1px solid var(--accent);
-  border-radius:6px;transition:left .25s cubic-bezier(.4,0,.2,1);}
-.segmented button{position:relative;z-index:1;background:none;border:none;color:var(--text-dim);
-  font-family:var(--sans);font-size:13px;font-weight:600;cursor:pointer;border-radius:6px;
-  height:100%;transition:color .25s;}
-.segmented button.active{color:var(--accent);}
+.tab-btn {
+  padding: 8px 20px;
+  font-size: 13px; font-weight: 700;
+  color: var(--text3);
+  background: none; border: none;
+  border-bottom: 3px solid transparent;
+  cursor: pointer;
+  transition: color .18s, border-color .18s;
+  display: flex; align-items: center; gap: 6px;
+}
+.tab-btn.active {
+  color: var(--blue);
+  border-bottom-color: var(--blue);
+}
+.tab-btn .t-icon { font-size: 15px; }
 
-/* ── Fréquence ── */
-.freqbox{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);
-  padding:12px;flex:1;display:flex;flex-direction:column;justify-content:center;}
-.freqbox .row1{display:flex;justify-content:space-between;align-items:baseline;}
-.freqbox .label{font-size:11px;color:var(--text-dim);letter-spacing:.04em;text-transform:uppercase;}
-.freqbox .reading{font-family:var(--mono);font-size:26px;font-weight:600;}
-.freqbox .reading .unit{font-size:13px;color:var(--text-dim);}
-.freqbox input[type=range]{width:100%;margin-top:10px;height:34px;background:transparent;
-  -webkit-appearance:none;}
-.freqbox input[type=range]::-webkit-slider-runnable-track{height:6px;background:var(--border);border-radius:3px;}
-.freqbox input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:30px;height:30px;
-  margin-top:-12px;border-radius:50%;background:var(--accent);border:3px solid var(--bg);
-  box-shadow:0 0 0 1px var(--accent);}
-.freqbox .hint{font-size:10px;color:var(--text-dim);margin-top:6px;}
+/* ══════════════════════════════════════════════════════
+   VUE GRAPHIQUES
+══════════════════════════════════════════════════════ */
+.charts-view {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  padding: 10px 12px;
+  flex: 1;
+  overflow: hidden;
+}
 
-/* ── Boutons d'action (confirmation double-tap) ── */
-.actions{display:flex;gap:10px;}
-.actionbtn{flex:1;background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);
-  color:var(--text);font-family:var(--sans);font-size:12.5px;font-weight:600;text-align:center;
-  padding:12px 6px;cursor:pointer;line-height:1.3;transition:background .2s,border-color .2s,color .2s;}
-.actionbtn .sub{display:block;font-size:10px;color:var(--text-dim);font-weight:400;margin-top:3px;}
-.actionbtn.confirm{background:var(--warn-dim);border-color:var(--warn);color:var(--warn);}
-.actionbtn.confirm .sub{color:var(--warn);}
-.actionbtn.busy{background:var(--accent-dim);border-color:var(--accent);color:var(--accent);}
+.chart-card {
+  background: var(--card);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 12px 14px;
+  display: flex; flex-direction: column;
+}
 
-/* ── Pied : santé équipements ── */
-footer{height:34px;display:flex;align-items:center;gap:18px;padding:0 18px;
-  border-top:1px solid var(--border);font-size:11px;color:var(--text-dim);}
-footer .health{display:flex;align-items:center;gap:6px;cursor:pointer;}
-footer .health .dot{width:7px;height:7px;border-radius:50%;background:var(--accent);}
-footer .health.problem .dot{background:var(--danger);box-shadow:0 0 5px var(--danger);}
-#healthDetail{margin-left:auto;font-family:var(--mono);font-size:10.5px;color:var(--danger);
-  max-width:480px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;}
+.chart-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 8px;
+  flex-shrink: 0;
+}
+
+.chart-title {
+  font-size: 12px; font-weight: 800;
+  letter-spacing: .05em; text-transform: uppercase;
+  color: var(--text2);
+  display: flex; align-items: center; gap: 6px;
+}
+
+.chart-current {
+  font-size: 20px; font-weight: 800;
+  letter-spacing: -.02em;
+  color: var(--text);
+}
+.chart-current .cu { font-size: 12px; color: var(--text3); font-weight: 600; }
+
+.chart-wrap {
+  flex: 1;
+  position: relative;
+  min-height: 0;
+}
+
+.chart-wrap canvas {
+  position: absolute; inset: 0;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.chart-footer {
+  font-size: 10px; color: var(--text3);
+  text-align: center;
+  margin-top: 6px;
+  flex-shrink: 0;
+}
+
+/* ══════════════════════════════════════════════════════
+   VEILLE ÉCRAN
+══════════════════════════════════════════════════════ */
+.sleep-overlay {
+  position: fixed; inset: 0; z-index: 9999;
+  background: #000;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+}
+
+.sleep-hint {
+  color: rgba(255,255,255,.18);
+  font-size: 15px; font-weight: 600;
+  font-family: var(--sans);
+  letter-spacing: .04em;
+  animation: breathe 3s ease-in-out infinite;
+}
+
+@keyframes breathe {
+  0%,100% { opacity: .4 }
+  50%      { opacity: 1  }
+}
+
+.fade-enter-active, .fade-leave-active { transition: opacity .6s ease; }
+.fade-enter-from,  .fade-leave-to      { opacity: 0; }
+
+
+header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 20px 8px;
+  background: white;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.brand {
+  display: flex; align-items: center; gap: 10px;
+}
+
+.logo {
+  width: 36px; height: 36px; border-radius: 10px;
+  background: linear-gradient(135deg, #0ea5e9, #3b82f6);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px; box-shadow: 0 2px 8px rgba(14,165,233,.35);
+}
+
+.brand-name {
+  font-size: 18px; font-weight: 800;
+  color: var(--text);
+  letter-spacing: -.02em;
+}
+
+.brand-status {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 12px; color: var(--text3);
+  font-family: var(--sans2);
+}
+
+.pill {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 10px; border-radius: 20px;
+  font-size: 12px; font-weight: 600;
+  background: var(--green-lt); color: var(--green);
+}
+.pill.offline { background: var(--red-lt); color: var(--red); }
+.pill.wait    { background: var(--amber-lt); color: var(--amber); }
+.pill-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: currentColor;
+  animation: pulse 2s ease-in-out infinite;
+}
+@keyframes pulse { 0%,100% { opacity:1 } 50% { opacity:.4 } }
+
+.clock {
+  font-size: 22px; font-weight: 700;
+  color: var(--text);
+  letter-spacing: -.02em;
+}
+
+/* ══════════════════════════════════════════════════════
+   BANDEAU DÉFAUT
+══════════════════════════════════════════════════════ */
+.fault-bar {
+  background: var(--red); color: white;
+  font-size: 13px; font-weight: 700;
+  padding: 6px 20px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+/* ══════════════════════════════════════════════════════
+   CORPS
+══════════════════════════════════════════════════════ */
+main {
+  display: flex; flex: 1;
+  padding: 8px 10px;
+  gap: 8px;
+  overflow: hidden;
+}
+
+/* ── Grille 3×2 capteurs ── */
+.col-sensors {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(2, 1fr);
+  gap: 6px;
+  flex: 1.1;
+}
+
+/* ── Panneau de commande ── */
+.col-control {
+  display: flex; flex-direction: column;
+  gap: 8px;
+  flex: 1.4;
+}
+
+/* ══════════════════════════════════════════════════════
+   CARTES CAPTEUR
+══════════════════════════════════════════════════════ */
+.sensor-card {
+  background: var(--card);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 8px 10px;
+  display: flex; flex-direction: column;
+  position: relative;
+  overflow: hidden;
+  transition: box-shadow .2s;
+}
+
+/* Bande colorée en haut */
+.sensor-card::before {
+  content: '';
+  position: absolute; top: 0; left: 0; right: 0; height: 4px;
+  background: var(--card-accent, var(--blue));
+  border-radius: var(--radius) var(--radius) 0 0;
+}
+
+.sensor-card.warn  { --card-accent: var(--amber); background: var(--amber-lt); }
+.sensor-card.bad   { --card-accent: var(--red);   background: var(--red-lt); }
+
+.card-top {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 3px;
+}
+
+.card-icon {
+  font-size: 16px; line-height: 1;
+}
+
+.card-badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 10px; font-weight: 700;
+  padding: 2px 7px; border-radius: 20px;
+  background: var(--blue-lt); color: var(--blue);
+}
+.card-badge.ok    { background: var(--green-lt); color: var(--green); }
+.card-badge.warn  { background: var(--amber-lt); color: var(--amber); }
+.card-badge.bad   { background: var(--red-lt);   color: var(--red);   }
+.card-badge.off   { background: #f1f5f9;          color: var(--text3); }
+
+.card-label {
+  font-size: 11px; font-weight: 700;
+  color: var(--text2);
+  letter-spacing: .03em; text-transform: uppercase;
+}
+
+.card-value-row {
+  display: flex; align-items: baseline; gap: 3px;
+  margin-top: 2px;
+}
+
+.card-value {
+  font-size: 26px; font-weight: 800;
+  color: var(--text);
+  line-height: 1;
+  letter-spacing: -.03em;
+}
+.sensor-card.warn .card-value { color: var(--amber); }
+.sensor-card.bad  .card-value { color: var(--red);   }
+
+.card-unit {
+  font-size: 15px; font-weight: 600;
+  color: var(--text3);
+}
+
+.card-sub {
+  font-size: 10px; color: var(--text3);
+  margin-top: 2px;
+}
+.card-sub.good { color: var(--green); font-weight: 700; }
+
+/* ══════════════════════════════════════════════════════
+   PANNEAU DE COMMANDE
+══════════════════════════════════════════════════════ */
+.control-card {
+  background: var(--card);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 14px 16px;
+}
+
+.section-title {
+  font-size: 11px; font-weight: 800;
+  letter-spacing: .08em; text-transform: uppercase;
+  color: var(--text3);
+  margin-bottom: 10px;
+}
+
+/* ── Sélecteur de mode ── */
+.mode-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.mode-btn {
+  background: var(--bg);
+  border: 2px solid var(--border);
+  border-radius: 14px;
+  padding: 16px 6px 14px;
+  cursor: pointer;
+  text-align: center;
+  transition: all .18s;
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  box-shadow: 0 1px 4px rgba(0,0,0,.06);
+}
+.mode-btn .m-icon  { font-size: 28px; line-height: 1; }
+.mode-btn .m-label {
+  font-size: 15px; font-weight: 800;
+  color: var(--text2);
+}
+
+.mode-btn.active {
+  background: var(--blue-lt);
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px rgba(59,130,246,.12);
+}
+.mode-btn.active .m-label { color: var(--blue); }
+
+.mode-btn.active-stop {
+  background: var(--red-lt);
+  border-color: var(--red);
+  box-shadow: 0 0 0 3px rgba(239,68,68,.12);
+}
+.mode-btn.active-stop .m-label { color: var(--red); }
+
+/* ── Curseur fréquence ── */
+.freq-card {
+  flex: 1;
+  display: flex; flex-direction: column; justify-content: center;
+}
+
+.freq-header {
+  display: flex; align-items: baseline; justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.freq-value {
+  font-size: 26px; font-weight: 800;
+  color: var(--text);
+  letter-spacing: -.02em;
+}
+.freq-value .fu { font-size: 14px; color: var(--text3); font-weight: 600; }
+
+input[type=range] {
+  -webkit-appearance: none;
+  width: 100%; height: 44px;
+  background: transparent; cursor: pointer;
+}
+input[type=range]::-webkit-slider-runnable-track {
+  height: 8px;
+  background: linear-gradient(90deg, var(--blue) var(--pct,50%), #e2e8f0 var(--pct,50%));
+  border-radius: 4px;
+}
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 32px; height: 32px;
+  margin-top: -12px;
+  border-radius: 50%;
+  background: white;
+  border: 3px solid var(--blue);
+  box-shadow: 0 2px 8px rgba(59,130,246,.3), 0 0 0 4px rgba(59,130,246,.08);
+}
+
+.freq-hint {
+  font-size: 10px; color: var(--text3);
+  text-align: center; margin-top: 2px;
+  font-family: var(--sans2);
+}
+
+/* ── Boutons d'action ── */
+.action-row { display: flex; gap: 8px; }
+
+.action-btn {
+  flex: 1;
+  background: var(--card);
+  border: 2px solid var(--border);
+  border-radius: 14px;
+  padding: 16px 8px;
+  cursor: pointer;
+  text-align: center;
+  transition: all .18s;
+  box-shadow: 0 1px 4px rgba(0,0,0,.06);
+}
+.action-btn .a-icon  { font-size: 26px; display: block; margin-bottom: 6px; }
+.action-btn .a-label { font-size: 13px; font-weight: 800; color: var(--text); display: block; }
+.action-btn .a-sub   { font-size: 11px; color: var(--text3); font-family: var(--sans2); }
+
+.action-btn.confirm {
+  background: var(--amber-lt);
+  border-color: var(--amber);
+}
+.action-btn.confirm .a-label { color: var(--amber); }
+
+.action-btn.busy {
+  background: var(--green-lt);
+  border-color: var(--green);
+}
+.action-btn.busy .a-label { color: var(--green); }
+
+/* ══════════════════════════════════════════════════════
+   PIED
+══════════════════════════════════════════════════════ */
+footer {
+  display: flex; align-items: center; gap: 0;
+  padding: 5px 16px 6px;
+  background: white;
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.health-chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 10px; border-radius: 20px;
+  font-size: 11px; font-weight: 700;
+  cursor: pointer;
+  background: var(--green-lt); color: var(--green);
+  margin-right: 6px;
+  transition: background .2s, color .2s;
+}
+.health-chip.problem {
+  background: var(--red-lt); color: var(--red);
+  animation: alertShake .4s;
+}
+@keyframes alertShake {
+  0%,100%{transform:translateX(0)} 25%{transform:translateX(-3px)} 75%{transform:translateX(3px)}
+}
+.health-chip-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: currentColor;
+}
+
+.health-detail {
+  margin-left: auto;
+  font-size: 11px; color: var(--red);
+  max-width: 400px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+  font-family: var(--sans2);
+}
 </style>
 </head>
 <body>
+<div id="app">
 
-<header>
-  <div class="brand">
-    <div class="dot" id="connDot"></div>
-    <b>PISCINE</b>
-    <span id="connLabel">connexion…</span>
-  </div>
-  <div id="clock">--:--:--</div>
-</header>
+  <!-- ── Overlay veille ── -->
+  <transition name="fade">
+    <div v-if="sleeping" class="sleep-overlay">
+      <div class="sleep-hint">Toucher l'écran pour réactiver</div>
+    </div>
+  </transition>
 
-<div id="faultBar"></div>
-
-<main>
-  <div class="col-instruments">
-    <div class="card" id="cardPh">
-      <div class="label">pH</div>
-      <div class="value"><span id="phValue">--</span></div>
-      <div class="sub">cible 7.2</div>
+  <!-- EN-TÊTE -->
+  <header>
+    <div class="brand">
+      <div class="logo">🏊</div>
+      <div>
+        <div class="brand-name">Ma Piscine</div>
+        <div class="brand-status">Système de pilotage automatique</div>
+      </div>
     </div>
 
-    <div class="card" id="cardOrp">
-      <div class="label">Redox (ORP)</div>
-      <div class="value"><span id="orpValue">--</span><span class="unit">mV</span></div>
-      <div class="sub" id="orpState">—</div>
+    <div class="pill" :class="connPill.cls">
+      <span class="pill-dot"></span>
+      {{ connPill.label }}
     </div>
 
-    <div class="card" id="cardWaterTemp">
-      <div class="label">Température eau</div>
-      <div class="value"><span id="waterTempValue">--</span><span class="unit">°C</span></div>
-      <div class="sub">&nbsp;</div>
-    </div>
+    <div class="clock">{{ clock }}</div>
+  </header>
 
-    <div class="card" id="cardPump">
-      <div class="runlight" id="pumpRunlight"></div>
-      <div class="label">Pompe filtration</div>
-      <div class="value"><span id="pumpFreqValue">--</span><span class="unit">Hz</span></div>
-      <div class="sub" id="pumpSub">consigne -- Hz</div>
-    </div>
-
-    <div class="card" id="cardPumpTemp">
-      <div class="label">Température pompe</div>
-      <div class="value"><span id="pumpTempValue">--</span><span class="unit">°C</span></div>
-      <div class="sub">&nbsp;</div>
-    </div>
-
-    <div class="card" id="cardElec">
-      <div class="runlight" id="elecRunlight"></div>
-      <div class="label">Électrolyseur</div>
-      <div class="value" id="elecValue">--</div>
-      <div class="sub">&nbsp;</div>
-    </div>
+  <!-- BANDEAU DÉFAUT -->
+  <div v-if="drive.isFault" class="fault-bar">
+    ⚠️ Défaut variateur — {{ drive.faultLabel }} (code {{ drive.faultCode }})
   </div>
 
-  <div class="col-control">
-    <div class="modebox">
-      <div class="label">Mode filtration</div>
-      <div class="segmented" id="modeSeg">
-        <div class="highlight" id="modeHighlight"></div>
-        <button data-mode="auto">Auto</button>
-        <button data-mode="forced">Forcé</button>
-        <button data-mode="stop">Stop</button>
-      </div>
-    </div>
-
-    <div class="freqbox">
-      <div class="row1">
-        <span class="label">Consigne fréquence</span>
-        <span class="reading"><span id="freqSliderValue">--</span><span class="unit"> Hz</span></span>
-      </div>
-      <input type="range" id="freqSlider" min="30" max="50" step="0.5" value="40">
-      <div class="hint">Relâcher pour envoyer — bascule automatiquement en mode forcé</div>
-    </div>
-
-    <div class="actions">
-      <div class="actionbtn" id="btnPrime">
-        Amorçage pompe<span class="sub">doseuse pH-</span>
-      </div>
-      <div class="actionbtn" id="btnCal">
-        Étalonnage pH<span class="sub">milieu (7.0)</span>
-      </div>
-    </div>
+  <!-- ONGLETS -->
+  <div class="tab-bar">
+    <button class="tab-btn" :class="{ active: activeTab === 'dashboard' }"
+      @click="activeTab = 'dashboard'">
+      <span class="t-icon">📊</span> Tableau de bord
+    </button>
+    <button class="tab-btn" :class="{ active: activeTab === 'charts' }"
+      @click="activeTab = 'charts'">
+      <span class="t-icon">📈</span> Graphiques
+    </button>
   </div>
-</main>
 
-<footer>
-  <div class="health" id="healthI2c"><div class="dot"></div>I2C</div>
-  <div class="health" id="healthOneWire"><div class="dot"></div>One-wire</div>
-  <div class="health" id="healthRs485"><div class="dot"></div>RS485</div>
-  <div id="healthDetail"></div>
-</footer>
+  <!-- CORPS DASHBOARD -->
+  <main v-if="activeTab === 'dashboard'">
+
+    <!-- Grille capteurs -->
+    <div class="col-sensors">
+
+      <!-- pH -->
+      <div class="sensor-card" :class="{ bad: sensors.phAlarmLow }"
+        style="--card-accent: #8b5cf6">
+        <div class="card-top">
+          <span class="card-icon">🧪</span>
+          <span class="card-badge" :class="sensors.phAlarmLow ? 'bad' : 'ok'">
+            {{ sensors.phAlarmLow ? 'Alarme' : 'OK' }}
+          </span>
+        </div>
+        <div class="card-label">pH de l'eau</div>
+        <div class="card-value-row">
+          <span class="card-value">{{ sensors.ph }}</span>
+        </div>
+        <div class="card-sub">Cible : 7.20</div>
+      </div>
+
+      <!-- ORP -->
+      <div class="sensor-card" :class="orpCardClass"
+        style="--card-accent: #0ea5e9">
+        <div class="card-top">
+          <span class="card-icon">⚡</span>
+          <span class="card-badge" :class="orpBadgeCls">{{ orpZone.label }}</span>
+        </div>
+        <div class="card-label">Redox (ORP)</div>
+        <div class="card-value-row">
+          <span class="card-value">{{ sensors.orp }}</span>
+          <span class="card-unit">mV</span>
+        </div>
+        <div class="card-sub" :class="{ good: orpZone.cls === 'state-good' }">
+          Optimal : 650–750 mV
+        </div>
+      </div>
+
+      <!-- Température eau -->
+      <div class="sensor-card" style="--card-accent: #f59e0b">
+        <div class="card-top">
+          <span class="card-icon">🌡️</span>
+          <span class="card-badge ok">Eau</span>
+        </div>
+        <div class="card-label">Température</div>
+        <div class="card-value-row">
+          <span class="card-value">{{ sensors.waterTemp }}</span>
+          <span class="card-unit">°C</span>
+        </div>
+        <div class="card-sub">Filtration : {{ sensors.targetFreq }} Hz cible</div>
+      </div>
+
+      <!-- Pompe -->
+      <div class="sensor-card" style="--card-accent: #3b82f6">
+        <div class="card-top">
+          <span class="card-icon">🔄</span>
+          <span class="card-badge" :class="drive.isRunning ? 'ok' : 'off'">
+            {{ drive.isRunning ? 'En marche' : 'Arrêtée' }}
+          </span>
+        </div>
+        <div class="card-label">Pompe filtration</div>
+        <div class="card-value-row">
+          <span class="card-value">{{ drive.freq }}</span>
+          <span class="card-unit">Hz</span>
+        </div>
+        <div class="card-sub">Mode : {{ sensors.filterMode }}</div>
+      </div>
+
+      <!-- Température pompe -->
+      <div class="sensor-card" :class="pumpTempCardClass"
+        style="--card-accent: #10b981">
+        <div class="card-top">
+          <span class="card-icon">🌡️</span>
+          <span class="card-badge" :class="pumpTempBadgeCls">Pompe</span>
+        </div>
+        <div class="card-label">Température pompe</div>
+        <div class="card-value-row">
+          <span class="card-value">{{ pumpTemp }}</span>
+          <span class="card-unit">°C</span>
+        </div>
+        <div class="card-sub">Alerte &gt; 60°C · Critique &gt; 70°C</div>
+      </div>
+
+      <!-- Électrolyseur -->
+      <div class="sensor-card" style="--card-accent: #10b981">
+        <div class="card-top">
+          <span class="card-icon">⚗️</span>
+          <span class="card-badge" :class="elecOn ? 'ok' : 'off'">
+            {{ elecOn ? 'Actif' : 'Inactif' }}
+          </span>
+        </div>
+        <div class="card-label">Électrolyseur</div>
+        <div class="card-value-row" style="margin-top:8px">
+          <span style="font-size:28px;font-weight:800;letter-spacing:-.02em;color:var(--text)">
+            {{ elecOn ? 'En marche' : 'Arrêté' }}
+          </span>
+        </div>
+        <div class="card-sub">Relais PCF8574</div>
+      </div>
+
+    </div>
+
+    <!-- Panneau de commande -->
+    <div class="col-control">
+
+      <!-- Mode filtration -->
+      <div class="control-card">
+        <div class="section-title">Mode filtration</div>
+        <div class="mode-grid">
+          <button v-for="m in modes" :key="m.key"
+            class="mode-btn"
+            :class="getModeClass(m.key)"
+            @click="sendMode(m.key)">
+            <span class="m-icon">{{ m.icon }}</span>
+            <span class="m-label">{{ m.label }}</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Fréquence -->
+      <div class="control-card freq-card">
+        <div class="section-title">Fréquence de la pompe</div>
+        <div class="freq-header">
+          <span style="font-size:12px;color:var(--text3)">30 Hz</span>
+          <span class="freq-value">{{ freqDisplay }} <span class="fu">Hz</span></span>
+          <span style="font-size:12px;color:var(--text3)">50 Hz</span>
+        </div>
+        <input type="range" min="30" max="50" step="0.5"
+          v-model="freqSlider"
+          :style="{ '--pct': freqPct }"
+          @input="onFreqInput"
+          @change="sendFreq"
+          @touchend="sendFreq">
+        <div class="freq-hint">Relâcher le curseur pour envoyer · bascule en mode forcé</div>
+      </div>
+
+      <!-- Actions -->
+      <div class="control-card" style="padding:12px 14px">
+        <div class="section-title">Actions</div>
+        <div class="action-row">
+          <div class="action-btn" :class="btnPrimeState.cls" @click="handleAction('prime')">
+            <span class="a-icon">💊</span>
+            <span class="a-label">{{ btnPrimeState.label }}</span>
+            <span class="a-sub">{{ btnPrimeState.sub }}</span>
+          </div>
+          <div class="action-btn" :class="btnCalState.cls" @click="handleAction('cal')">
+            <span class="a-icon">🔬</span>
+            <span class="a-label">{{ btnCalState.label }}</span>
+            <span class="a-sub">{{ btnCalState.sub }}</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <!-- VUE GRAPHIQUES -->
+  <div v-if="activeTab === 'charts'" class="charts-view">
+
+    <!-- Température eau -->
+    <div class="chart-card">
+      <div class="chart-header">
+        <div class="chart-title">🌡️ Température eau</div>
+        <div class="chart-current">{{ sensors.waterTemp }}<span class="cu"> °C</span></div>
+      </div>
+      <div class="chart-wrap">
+        <canvas ref="chartTemp"></canvas>
+      </div>
+      <div class="chart-footer">{{ historyLabel }}</div>
+    </div>
+
+    <!-- pH -->
+    <div class="chart-card">
+      <div class="chart-header">
+        <div class="chart-title">🧪 pH</div>
+        <div class="chart-current">{{ sensors.ph }}</div>
+      </div>
+      <div class="chart-wrap">
+        <canvas ref="chartPh"></canvas>
+      </div>
+      <div class="chart-footer">{{ historyLabel }}</div>
+    </div>
+
+    <!-- ORP -->
+    <div class="chart-card">
+      <div class="chart-header">
+        <div class="chart-title">⚡ Redox (ORP)</div>
+        <div class="chart-current">{{ sensors.orp }}<span class="cu"> mV</span></div>
+      </div>
+      <div class="chart-wrap">
+        <canvas ref="chartOrp"></canvas>
+      </div>
+      <div class="chart-footer">{{ historyLabel }}</div>
+    </div>
+
+  </div>
+
+  <!-- PIED -->
+  <footer>
+    <div v-for="h in healthItems" :key="h.id"
+      class="health-chip" :class="{ problem: h.problem }"
+      @click="healthDetail = h.problem ? h.error : ''">
+      <div class="health-chip-dot"></div>
+      {{ h.label }}
+    </div>
+    <div class="health-detail">{{ healthDetail }}</div>
+  </footer>
+
+</div>
 
 <script>
-/* ============================================================
-   CONFIGURATION — à adapter à votre installation
-   ============================================================ */
-const MQTT_URL    = "ws://ADRESSE_DE_VOTRE_BROKER:9001"; // ex: ws://192.168.1.50:9001
-const MQTT_USER   = "";                                   // si authentification activée
+const { createApp, ref, computed, reactive, onMounted, watch, nextTick } = Vue;
+
+const MQTT_URL    = "ws://192.168.1.100:9001";
+const MQTT_USER   = "MQTT_Piscine";
 const MQTT_PASS   = "";
-const MQTT_PREFIX = "pool";                                // doit correspondre à PoolConfig.MqttPrefix
+const MQTT_PREFIX = "pool";
 
-/* ============================================================
-   Connexion MQTT
-   ============================================================ */
-const T = {
-  sensors: `${MQTT_PREFIX}/sensors`,
-  drive: `${MQTT_PREFIX}/drive`,
-  electrolyzer: `${MQTT_PREFIX}/electrolyzer/state`,
-  pumpTemp: `${MQTT_PREFIX}/pump_temp`,
-  health: `${MQTT_PREFIX}/health`,
-  status: `${MQTT_PREFIX}/status`,
-  cmdMode: `${MQTT_PREFIX}/cmd/mode`,
-  cmdFreq: `${MQTT_PREFIX}/cmd/freq`,
-  cmdPrime: `${MQTT_PREFIX}/cmd/prime`,
-  cmdCalMid: `${MQTT_PREFIX}/cmd/calibrate_mid`,
-};
-
-const connDot = document.getElementById('connDot');
-const connLabel = document.getElementById('connLabel');
-
-const client = mqtt.connect(MQTT_URL, {
-  username: MQTT_USER || undefined,
-  password: MQTT_PASS || undefined,
-  reconnectPeriod: 3000,
-});
-
-client.on('connect', () => {
-  connDot.className = 'dot live';
-  connLabel.textContent = 'en ligne';
-  Object.values(T).filter(t => !t.startsWith(MQTT_PREFIX + '/cmd/')).forEach(t => client.subscribe(t));
-});
-client.on('reconnect', () => { connDot.className = 'dot'; connLabel.textContent = 'reconnexion…'; });
-client.on('close',     () => { connDot.className = 'dot down'; connLabel.textContent = 'hors ligne'; });
-client.on('error',     () => { connDot.className = 'dot down'; connLabel.textContent = 'erreur'; });
-
-client.on('message', (topic, payloadBuf) => {
-  const payload = payloadBuf.toString();
-  try {
-    if (topic === T.sensors) renderSensors(JSON.parse(payload));
-    else if (topic === T.drive) renderDrive(JSON.parse(payload));
-    else if (topic === T.health) renderHealth(JSON.parse(payload));
-    else if (topic === T.electrolyzer) renderElectrolyzer(payload);
-    else if (topic === T.pumpTemp) renderPumpTemp(payload);
-    else if (topic === T.status) {
-      if (payload === 'offline') { connDot.className = 'dot down'; connLabel.textContent = 'contrôleur hors ligne'; }
-    }
-  } catch (e) { console.error('Message MQTT illisible', topic, e); }
-});
-
-/* ============================================================
-   Rendu — capteurs (pool/sensors)
-   ============================================================ */
 const ORP_ZONES = [
-  { max: 550, label: 'Critique',     cls: 'state-danger' },
-  { max: 620, label: 'Bas',          cls: 'state-warn' },
-  { max: 650, label: 'Limite basse', cls: 'state-warn' },
-  { max: 750, label: 'Optimal',      cls: 'state-good' },
-  { max: 800, label: 'Limite haute', cls: 'state-warn' },
-  { max: Infinity, label: 'Surdosage', cls: 'state-warn' },
+  { max: 550,      label: 'Critique',     cls: 'state-danger' },
+  { max: 620,      label: 'Bas',          cls: 'state-warn'   },
+  { max: 650,      label: 'Limite basse', cls: 'state-warn'   },
+  { max: 750,      label: 'Optimal',      cls: 'state-good'   },
+  { max: 800,      label: 'Limite haute', cls: 'state-warn'   },
+  { max: Infinity, label: 'Surdosage',    cls: 'state-warn'   },
 ];
 
-function renderSensors(d) {
-  document.getElementById('phValue').textContent = d.PhValue.toFixed(2);
-  document.getElementById('cardPh').classList.toggle('state-danger', !!d.PhAlarmLow);
+createApp({
+  setup() {
+    const connState = ref('');
+    const clock     = ref('--:--:--');
+    const sleeping  = ref(false);
+    const activeTab = ref('dashboard');
 
-  document.getElementById('orpValue').textContent = Math.round(d.OrpMv);
-  const zone = ORP_ZONES.find(z => d.OrpMv <= z.max);
-  document.getElementById('orpState').textContent = zone.label;
-  const cardOrp = document.getElementById('cardOrp');
-  cardOrp.className = 'card ' + (d.OrpAlarm ? 'state-danger' : zone.cls);
+    /* ── Historique (60 points max = ~5 min à 5s/cycle) ── */
+    const MAX_POINTS  = 60;
+    const history     = reactive({ temp: [], ph: [], orp: [], labels: [] });
 
-  document.getElementById('waterTempValue').textContent = d.WaterTempC.toFixed(1);
-  document.getElementById('pumpSub').textContent = `consigne auto ${d.TargetFreqHz.toFixed(0)} Hz`;
-
-  setActiveMode(d.FilterMode);
-  if (!freqSliderDragging) {
-    freqSlider.value = d.PumpForcedFreqHz;
-    document.getElementById('freqSliderValue').textContent = Number(d.PumpForcedFreqHz).toFixed(1);
-  }
-}
-
-function renderDrive(d) {
-  document.getElementById('pumpFreqValue').textContent = d.OutFreqHz.toFixed(1);
-  document.getElementById('pumpRunlight').classList.toggle('on', !!d.IsRunning);
-  const fb = document.getElementById('faultBar');
-  if (d.IsFault) {
-    fb.textContent = `⚠ Défaut variateur — ${d.FaultLabel} (code ${d.FaultCode})`;
-    fb.classList.add('show');
-  } else {
-    fb.classList.remove('show');
-  }
-}
-
-function renderElectrolyzer(state) {
-  const on = state === 'ON';
-  document.getElementById('elecValue').textContent = on ? 'En marche' : 'Arrêté';
-  document.getElementById('elecRunlight').classList.toggle('on', on);
-}
-
-function renderPumpTemp(raw) {
-  const t = parseFloat(raw);
-  document.getElementById('pumpTempValue').textContent = isNaN(t) ? '--' : t.toFixed(1);
-  const card = document.getElementById('cardPumpTemp');
-  card.classList.remove('state-warn', 'state-danger');
-  if (t >= 70) card.classList.add('state-danger');
-  else if (t >= 60) card.classList.add('state-warn');
-}
-
-function renderHealth(d) {
-  setHealthDot('healthI2c', d.I2cProblem, d.I2cLastError);
-  setHealthDot('healthOneWire', d.OneWireProblem, d.OneWireLastError);
-  setHealthDot('healthRs485', d.Rs485Problem, d.Rs485LastError);
-}
-function setHealthDot(id, problem, lastError) {
-  const el = document.getElementById(id);
-  el.classList.toggle('problem', !!problem);
-  if (problem) el.dataset.error = lastError;
-}
-document.querySelectorAll('footer .health').forEach(el => {
-  el.addEventListener('click', () => {
-    document.getElementById('healthDetail').textContent = el.classList.contains('problem')
-      ? (el.dataset.error || 'Erreur inconnue') : '';
-  });
-});
-
-/* ============================================================
-   Sélecteur de mode
-   ============================================================ */
-const segBtns = Array.from(document.querySelectorAll('#modeSeg button'));
-const modeHighlight = document.getElementById('modeHighlight');
-function setActiveMode(modeName) {
-  const key = (modeName || '').toLowerCase();
-  const idx = segBtns.findIndex(b => b.dataset.mode === key);
-  segBtns.forEach(b => b.classList.toggle('active', b.dataset.mode === key));
-  if (idx >= 0) modeHighlight.style.left = `calc(${idx * 33.333}% + 3px)`;
-}
-segBtns.forEach(btn => btn.addEventListener('click', () => {
-  client.publish(T.cmdMode, btn.dataset.mode);
-}));
-
-/* ============================================================
-   Fréquence (slider — publication au relâchement uniquement)
-   ============================================================ */
-const freqSlider = document.getElementById('freqSlider');
-let freqSliderDragging = false;
-freqSlider.addEventListener('input', () => {
-  freqSliderDragging = true;
-  document.getElementById('freqSliderValue').textContent = Number(freqSlider.value).toFixed(1);
-});
-['change', 'touchend', 'mouseup'].forEach(evt =>
-  freqSlider.addEventListener(evt, () => {
-    client.publish(T.cmdFreq, Number(freqSlider.value).toFixed(1));
-    setTimeout(() => { freqSliderDragging = false; }, 500);
-  })
-);
-
-/* ============================================================
-   Boutons d'action — confirmation à double appui
-   ============================================================ */
-function armConfirmButton(el, label, subLabel, topic, payload) {
-  let armed = false, timer = null;
-  el.addEventListener('click', () => {
-    if (!armed) {
-      armed = true;
-      el.classList.add('confirm');
-      el.innerHTML = `Confirmer ?<span class="sub">${subLabel}</span>`;
-      timer = setTimeout(() => disarm(), 4000);
-    } else {
-      clearTimeout(timer);
-      client.publish(topic, payload);
-      el.classList.remove('confirm');
-      el.classList.add('busy');
-      el.innerHTML = `Envoyé<span class="sub">${subLabel}</span>`;
-      setTimeout(() => { el.classList.remove('busy'); reset(); }, 2500);
-      armed = false;
+    function pushHistory(temp, ph, orp) {
+      const t = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      const push = (arr, val) => { arr.push(val); if (arr.length > MAX_POINTS) arr.shift(); };
+      push(history.temp,   parseFloat(temp) || null);
+      push(history.ph,     parseFloat(ph)   || null);
+      push(history.orp,    parseFloat(orp)  || null);
+      push(history.labels, t);
+      updateCharts();
     }
-  });
-  function disarm() {
-    armed = false;
-    el.classList.remove('confirm');
-    reset();
-  }
-  function reset() { el.innerHTML = `${label}<span class="sub">${subLabel}</span>`; }
-}
-armConfirmButton(document.getElementById('btnPrime'), 'Amorçage pompe', 'doseuse pH-', T.cmdPrime, 'ON');
-armConfirmButton(document.getElementById('btnCal'), 'Étalonnage pH', 'milieu (7.0)', T.cmdCalMid, 'ON');
 
-/* ============================================================
-   Horloge
-   ============================================================ */
-function tickClock() {
-  document.getElementById('clock').textContent =
-    new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-}
-tickClock();
-setInterval(tickClock, 1000);
+    const historyLabel = computed(() =>
+      `${history.labels.length} relevés · ${history.labels.at(0) || '--'} → ${history.labels.at(-1) || '--'}`
+    );
+
+    /* ── Refs canvas ── */
+    const chartTemp = ref(null);
+    const chartPh   = ref(null);
+    const chartOrp  = ref(null);
+    let   charts    = {};
+
+    const CHART_DEFAULTS = {
+      type: 'line',
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: false,
+        plugins: { legend: { display: false }, tooltip: {
+          backgroundColor: 'rgba(255,255,255,.95)',
+          titleColor: '#1e293b',
+          bodyColor: '#64748b',
+          borderColor: '#e2e8f0',
+          borderWidth: 1,
+          padding: 8,
+          callbacks: { title: items => items[0].label }
+        }},
+        scales: {
+          x: {
+            display: false,
+            grid: { display: false },
+          },
+          y: {
+            grid: { color: '#f1f5f9', drawBorder: false },
+            ticks: {
+              font: { size: 10, family: "'Nunito', sans-serif" },
+              color: '#94a3b8',
+              maxTicksLimit: 5,
+            },
+            border: { display: false },
+          }
+        },
+        elements: {
+          point: { radius: 0, hoverRadius: 4 },
+          line: { tension: 0.35, borderWidth: 2.5 }
+        }
+      }
+    };
+
+    function makeDataset(color, fill) {
+      return {
+        data: [],
+        borderColor: color,
+        backgroundColor: fill,
+        fill: true,
+        pointBackgroundColor: color,
+      };
+    }
+
+    function initCharts() {
+      const labels = history.labels;
+
+      charts.temp = new Chart(chartTemp.value, {
+        ...CHART_DEFAULTS,
+        data: {
+          labels,
+          datasets: [makeDataset('#f59e0b', 'rgba(245,158,11,.08)')]
+        },
+        options: { ...CHART_DEFAULTS.options,
+          scales: { ...CHART_DEFAULTS.options.scales,
+            y: { ...CHART_DEFAULTS.options.scales.y,
+              min: 15, max: 40,
+              ticks: { ...CHART_DEFAULTS.options.scales.y.ticks,
+                callback: v => v + '°' }
+            }
+          }
+        }
+      });
+
+      charts.ph = new Chart(chartPh.value, {
+        ...CHART_DEFAULTS,
+        data: {
+          labels,
+          datasets: [makeDataset('#8b5cf6', 'rgba(139,92,246,.08)')]
+        },
+        options: { ...CHART_DEFAULTS.options,
+          plugins: { ...CHART_DEFAULTS.options.plugins,
+            annotation: undefined
+          },
+          scales: { ...CHART_DEFAULTS.options.scales,
+            y: { ...CHART_DEFAULTS.options.scales.y,
+              min: 6.5, max: 7.8,
+              ticks: { ...CHART_DEFAULTS.options.scales.y.ticks,
+                callback: v => v.toFixed(1) }
+            }
+          }
+        }
+      });
+
+      charts.orp = new Chart(chartOrp.value, {
+        ...CHART_DEFAULTS,
+        data: {
+          labels,
+          datasets: [makeDataset('#0ea5e9', 'rgba(14,165,233,.08)')]
+        },
+        options: { ...CHART_DEFAULTS.options,
+          scales: { ...CHART_DEFAULTS.options.scales,
+            y: { ...CHART_DEFAULTS.options.scales.y,
+              min: 400, max: 900,
+              ticks: { ...CHART_DEFAULTS.options.scales.y.ticks,
+                callback: v => v + ' mV' }
+            }
+          }
+        }
+      });
+    }
+
+    function updateCharts() {
+      if (!charts.temp) return;
+      ['temp', 'ph', 'orp'].forEach(key => {
+        charts[key].data.labels          = [...history.labels];
+        charts[key].data.datasets[0].data = [...history[key]];
+        charts[key].update('none');
+      });
+    }
+
+    /* Initialiser les charts quand on passe sur l'onglet graphiques */
+    watch(activeTab, async val => {
+      if (val === 'charts') {
+        await nextTick();
+        if (!charts.temp) initCharts();
+        else updateCharts();
+      }
+    });
+
+    const connPill = computed(() => {
+      if (connState.value === 'live') return { cls: '',        label: 'En ligne' };
+      if (connState.value === 'down') return { cls: 'offline', label: 'Hors ligne' };
+      return { cls: 'wait', label: 'Connexion…' };
+    });
+
+    const sensors = reactive({
+      ph: '--', orp: '--', waterTemp: '--',
+      targetFreq: '--', filterMode: '--',
+      phAlarmLow: false, orpAlarm: false,
+    });
+    const drive = reactive({
+      freq: '--', isRunning: false,
+      isFault: false, faultCode: 0, faultLabel: '',
+    });
+    const pumpTemp     = ref('--');
+    const elecOn       = ref(false);
+    const healthDetail = ref('');
+    const healthItems  = reactive([
+      { id: 'i2c',     label: 'I2C',      problem: false, error: '' },
+      { id: 'onewire', label: 'One-wire', problem: false, error: '' },
+      { id: 'rs485',   label: 'RS485',    problem: false, error: '' },
+    ]);
+
+    /* ── Modes ── */
+    const modes = [
+      { key: 'auto',   label: 'Auto',  icon: '🔁' },
+      { key: 'forced', label: 'Forcé', icon: '⚡' },
+      { key: 'stop',   label: 'Stop',  icon: '⏹️' },
+    ];
+
+    function getModeClass(key) {
+      if (sensors.filterMode !== key) return '';
+      return key === 'stop' ? 'active-stop' : 'active';
+    }
+
+    /* ── ORP calculé ── */
+    const orpZone = computed(() => {
+      const v = parseFloat(sensors.orp);
+      return isNaN(v) ? { label: '—', cls: '' }
+        : ORP_ZONES.find(z => v <= z.max) || ORP_ZONES.at(-1);
+    });
+
+    const orpCardClass = computed(() => {
+      if (sensors.orpAlarm) return 'sensor-card bad';
+      if (orpZone.value.cls === 'state-warn') return 'sensor-card warn';
+      return 'sensor-card';
+    });
+
+    const orpBadgeCls = computed(() => {
+      if (sensors.orpAlarm || orpZone.value.cls === 'state-danger') return 'bad';
+      if (orpZone.value.cls === 'state-warn') return 'warn';
+      return 'ok';
+    });
+
+    /* ── Température pompe ── */
+    const pumpTempCardClass = computed(() => {
+      const t = parseFloat(pumpTemp.value);
+      if (t >= 70) return 'sensor-card bad';
+      if (t >= 60) return 'sensor-card warn';
+      return 'sensor-card';
+    });
+
+    const pumpTempBadgeCls = computed(() => {
+      const t = parseFloat(pumpTemp.value);
+      if (t >= 70) return 'bad';
+      if (t >= 60) return 'warn';
+      return 'ok';
+    });
+
+    /* ── Fréquence ── */
+    const freqSlider  = ref(40);
+    const freqDisplay = ref('--');
+    const freqPct     = computed(() => ((freqSlider.value - 30) / 20 * 100).toFixed(1) + '%');
+    let freqDragging  = false;
+
+    function onFreqInput() {
+      freqDragging = true;
+      freqDisplay.value = Number(freqSlider.value).toFixed(1);
+    }
+    function sendFreq() {
+      mqttClient.publish(`${MQTT_PREFIX}/cmd/freq`, Number(freqSlider.value).toFixed(1));
+      setTimeout(() => { freqDragging = false; }, 500);
+    }
+
+    /* ── Boutons d'action ── */
+    function makeBtn(label, sub) {
+      return reactive({ label, sub, cls: '', armed: false, timer: null, defaultLabel: label });
+    }
+    const btnPrimeState = makeBtn('Amorçage',   'Pompe doseuse pH-');
+    const btnCalState   = makeBtn('Étalonnage', 'pH milieu 7.0');
+
+    const BTN_CFG = {
+      prime: { state: btnPrimeState, topic: `${MQTT_PREFIX}/cmd/prime`,         payload: 'ON' },
+      cal:   { state: btnCalState,   topic: `${MQTT_PREFIX}/cmd/calibrate_mid`, payload: 'ON' },
+    };
+
+    function handleAction(key) {
+      const { state, topic, payload } = BTN_CFG[key];
+      if (!state.armed) {
+        state.armed = true; state.cls = 'confirm'; state.label = 'Confirmer ?';
+        state.timer = setTimeout(() => {
+          state.armed = false; state.cls = ''; state.label = state.defaultLabel;
+        }, 4000);
+      } else {
+        clearTimeout(state.timer);
+        mqttClient.publish(topic, payload);
+        state.armed = false; state.cls = 'busy'; state.label = 'Envoyé ✓';
+        setTimeout(() => { state.cls = ''; state.label = state.defaultLabel; }, 2500);
+      }
+    }
+
+    /* ── MQTT ── */
+    let mqttClient;
+    const TOPICS = {
+      sensors:     `${MQTT_PREFIX}/sensors`,
+      drive:       `${MQTT_PREFIX}/drive`,
+      electrolyzer:`${MQTT_PREFIX}/electrolyzer/state`,
+      pumpTemp:    `${MQTT_PREFIX}/pump_temp`,
+      health:      `${MQTT_PREFIX}/health`,
+      status:      `${MQTT_PREFIX}/status`,
+    };
+
+    function sendMode(mode) { mqttClient.publish(`${MQTT_PREFIX}/cmd/mode`, mode); }
+
+    function initMqtt() {
+      mqttClient = mqtt.connect(MQTT_URL, {
+        username: MQTT_USER || undefined,
+        password: MQTT_PASS || undefined,
+        reconnectPeriod: 3000,
+      });
+
+      mqttClient.on('connect', () => {
+        connState.value = 'live';
+        Object.values(TOPICS).forEach(t => mqttClient.subscribe(t));
+      });
+      mqttClient.on('reconnect', () => connState.value = '');
+      mqttClient.on('close',     () => connState.value = 'down');
+      mqttClient.on('error',     () => connState.value = 'down');
+
+      mqttClient.on('message', (topic, buf) => {
+        const raw = buf.toString();
+        try {
+          switch (topic) {
+            case TOPICS.sensors: {
+              const d = JSON.parse(raw);
+              sensors.ph         = d.PhValue.toFixed(2);
+              sensors.orp        = Math.round(d.OrpMv).toString();
+              sensors.waterTemp  = d.WaterTempC.toFixed(1);
+              sensors.targetFreq = d.TargetFreqHz.toFixed(0);
+              sensors.phAlarmLow = !!d.PhAlarmLow;
+              sensors.orpAlarm   = !!d.OrpAlarm;
+              sensors.filterMode = (d.FilterMode || 'auto').toLowerCase();
+              if (!freqDragging) {
+                freqSlider.value  = d.PumpForcedFreqHz;
+                freqDisplay.value = Number(d.PumpForcedFreqHz).toFixed(1);
+              }
+              pushHistory(d.WaterTempC.toFixed(1), d.PhValue.toFixed(2), Math.round(d.OrpMv));
+              break;
+            }
+            case TOPICS.drive: {
+              const d = JSON.parse(raw);
+              drive.freq      = d.OutFreqHz.toFixed(1);
+              drive.isRunning = !!d.IsRunning;
+              drive.isFault   = !!d.IsFault;
+              drive.faultCode = d.FaultCode;
+              drive.faultLabel= d.FaultLabel;
+              break;
+            }
+            case TOPICS.health: {
+              const d = JSON.parse(raw);
+              healthItems[0].problem = !!d.I2cProblem;     healthItems[0].error = d.I2cLastError    || '';
+              healthItems[1].problem = !!d.OneWireProblem; healthItems[1].error = d.OneWireLastError || '';
+              healthItems[2].problem = !!d.Rs485Problem;   healthItems[2].error = d.Rs485LastError   || '';
+              break;
+            }
+            case TOPICS.electrolyzer: elecOn.value = raw === 'ON'; break;
+            case TOPICS.pumpTemp:
+              pumpTemp.value = isNaN(parseFloat(raw)) ? '--' : parseFloat(raw).toFixed(1);
+              break;
+            case TOPICS.status:
+              if (raw === 'offline') connState.value = 'down';
+              break;
+          }
+        } catch(e) { console.error('MQTT', topic, e); }
+      });
+    }
+
+    onMounted(() => {
+      initMqtt();
+      const tick = () => clock.value = new Date().toLocaleTimeString('fr-FR',
+        { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      tick(); setInterval(tick, 1000);
+
+      // ── Veille écran ──────────────────────────────────────────────────────
+      // L'overlay noir couvre toute l'appli. Au premier toucher, il disparaît
+      // et le timer repart pour 60s. On écoute touchstart ET click pour
+      // couvrir à la fois l'usage tactile et la souris (tests sur PC).
+      const TIMEOUT_MS = 60_000;
+      let sleepTimer;
+
+      function goToSleep() {
+        sleeping.value = true;
+      }
+
+      function wakeUp(e) {
+        if (sleeping.value) {
+          // Premier appui : réveille uniquement, n'envoie PAS le toucher
+          // aux éléments sous l'overlay (ex. évite un appui accidentel sur
+          // un bouton de mode au réveil).
+          e.preventDefault();
+          e.stopPropagation();
+          sleeping.value = false;
+        }
+        resetTimer();
+      }
+
+      function resetTimer() {
+        clearTimeout(sleepTimer);
+        sleepTimer = setTimeout(goToSleep, TIMEOUT_MS);
+      }
+
+      document.addEventListener('touchstart', wakeUp, { capture: true });
+      document.addEventListener('click',      wakeUp, { capture: true });
+      resetTimer();
+    });
+
+    return {
+      connPill, clock, sleeping, activeTab,
+      chartTemp, chartPh, chartOrp, historyLabel,
+      sensors, drive, pumpTemp, elecOn,
+      orpZone, orpCardClass, orpBadgeCls,
+      pumpTempCardClass, pumpTempBadgeCls,
+      modes, getModeClass,
+      freqSlider, freqDisplay, freqPct,
+      btnPrimeState, btnCalState,
+      healthItems, healthDetail,
+      sendMode, sendFreq, onFreqInput, handleAction,
+    };
+  }
+}).mount('#app');
 </script>
 </body>
 </html>
