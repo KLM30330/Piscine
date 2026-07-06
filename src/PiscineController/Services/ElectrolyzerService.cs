@@ -10,24 +10,20 @@ public sealed class ElectrolyzerService : BackgroundService
     private readonly PoolState _state;
     private readonly Pcf8574 _relay;
     private readonly MqttService _mqtt;
-    private readonly string _mqttPrefix;
+    private readonly PoolConfig _cfg;
     private readonly ILogger<ElectrolyzerService> _logger;
-    private bool? _lastActive;   // null = jamais publié, force le premier envoi
-    private bool? _lastEnabled;  // idem, suivi indépendant de "enabled"
+    private bool? _lastActive;
+    private bool? _lastEnabled;
 
     public ElectrolyzerService(PoolState state, Pcf8574 relay,
         MqttService mqtt, PiscineController.Config.PoolConfig cfg,
         ILogger<ElectrolyzerService> logger)
     {
         _state = state; _relay = relay;
-        _mqtt = mqtt; _mqttPrefix = cfg.MqttPrefix; _logger = logger;
+        _mqtt = mqtt; _cfg = cfg; _logger = logger;
 
-        // La consigne (ElectrolyzerEnabled) vit dans PoolState, modifiable
-        // depuis MqttService sans dépendance circulaire (MqttService dépend
-        // déjà de PoolState, pas l'inverse). On réagit immédiatement à un
-        // changement plutôt que d'attendre le prochain cycle de 5s.
         _state.ElectrolyzerEnabledChanged += enabled => { _ = ApplyAndPublishNowAsync(); };
-        _state.PumpRunningChanged       += running => { _ = ApplyAndPublishNowAsync(); };
+        _state.PumpRunningChanged         += running => { _ = ApplyAndPublishNowAsync(); };
     }
 
     private async Task ApplyAndPublishNowAsync()
@@ -52,20 +48,37 @@ public sealed class ElectrolyzerService : BackgroundService
             catch (Exception ex) when (!ct.IsCancellationRequested)
             { _logger.LogError(ex, "ElectrolyzerService: erreur"); }
 
-            await Task.Delay(TimeSpan.FromSeconds(5), ct).ConfigureAwait(false);
+            // Réévaluation toutes les 5s ET à chaque changement d'état
+            // (via événements PumpRunningChanged/ElectrolyzerEnabledChanged).
+            // On calcule aussi le délai jusqu'à la prochaine transition
+            // horaire (StartH ou StopH) pour couper/activer exactement
+            // à l'heure sans attendre un cycle complet.
+            int h = DateTime.Now.Hour;
+            int minToNext = h < _cfg.ElectrolyzerStartH
+                ? (_cfg.ElectrolyzerStartH - h) * 60 - DateTime.Now.Minute
+                : h < _cfg.ElectrolyzerStopH
+                    ? (_cfg.ElectrolyzerStopH - h) * 60 - DateTime.Now.Minute
+                    : (24 - h + _cfg.ElectrolyzerStartH) * 60 - DateTime.Now.Minute;
+            int delaySec = Math.Min(5, Math.Max(1, minToNext * 60));
+
+            await Task.Delay(TimeSpan.FromSeconds(delaySec), ct).ConfigureAwait(false);
         }
-        // Arrêt du service : désactiver le relais (HIGH=true en actif-bas),
-        // pour ne jamais laisser l'électrolyseur engagé après extinction.
         try { _relay.SetPin(0, true); } catch { }
     }
 
     private void Apply()
     {
-        // Verrou de sécurité : l'électrolyseur ne peut JAMAIS être actif si la
-        // pompe ne tourne pas, quelle que soit la consigne utilisateur — vrai
-        // dans tous les modes de filtration (Auto/Forced/Pause/Stop),
-        // puisque _state.PumpRunning reflète l'état réel matériel du variateur.
-        bool active = _state.ElectrolyzerEnabled && _state.PumpRunning;
+        // Verrou de sécurité 1 : pompe doit tourner
+        // Verrou de sécurité 2 : plage horaire autorisée
+        int h = DateTime.Now.Hour;
+        bool inTimeWindow = h >= _cfg.ElectrolyzerStartH && h < _cfg.ElectrolyzerStopH;
+
+        if (!inTimeWindow && _state.ElectrolyzerRunning)
+            _logger.LogInformation(
+                "Électrolyseur coupé (hors plage {Start}h–{Stop}h)",
+                _cfg.ElectrolyzerStartH, _cfg.ElectrolyzerStopH);
+
+        bool active = _state.ElectrolyzerEnabled && _state.PumpRunning && inTimeWindow;
 
         // Pcf8574 : relais actif-bas (cf. constructeur, état par défaut 0xFF =
         // "relais désactivés"). Pour ACTIVER le relais il faut donc mettre la
@@ -92,13 +105,13 @@ public sealed class ElectrolyzerService : BackgroundService
 
         // État réel du relais (ON/OFF pour HA)
         await _mqtt.PublishAsync(
-            $"{_mqttPrefix}/electrolyzer/state",
+            $"{_cfg.MqttPrefix}/electrolyzer/state",
             active ? "ON" : "OFF",
             retain: true, ct: ct);
 
         // Consigne (ce que l'utilisateur a demandé, indépendant de la pompe)
         await _mqtt.PublishAsync(
-            $"{_mqttPrefix}/electrolyzer/enabled",
+            $"{_cfg.MqttPrefix}/electrolyzer/enabled",
             enabled ? "ON" : "OFF",
             retain: true, ct: ct);
 
