@@ -22,6 +22,14 @@ public sealed class PoolConfig
     // utilisée pour alimenter la pompe directement en mode secours, sans variateur.
     public int RescuePumpRelayPin { get; set; } = 1;
 
+    // Plage horaire d'autorisation de l'électrolyseur.
+    // En dehors de cette plage, l'électrolyseur est coupé même si la pompe
+    // tourne — utile pour éviter le surdosage nocturne (brossage, baignade
+    // absente, eau stagnante). 0–24 en heures entières.
+    // Ex. : 8h00–22h00 → ElectrolyzerStartH=8, ElectrolyzerStopH=22.
+    public int ElectrolyzerStartH { get; set; } = 8;
+    public int ElectrolyzerStopH  { get; set; } = 22;
+
     // 1-Wire DS18B20
     public string? OnewirePumpSensorId { get; set; } = "28-0103804a321b";
     public double PumpTempAlertC { get; set; } = 60.0;
