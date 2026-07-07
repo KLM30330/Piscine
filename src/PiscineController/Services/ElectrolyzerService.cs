@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using PiscineController.Config;
 using PiscineController.Hardware;
 using PiscineController.Services;
 
@@ -16,7 +17,7 @@ public sealed class ElectrolyzerService : BackgroundService
     private bool? _lastEnabled;
 
     public ElectrolyzerService(PoolState state, Pcf8574 relay,
-        MqttService mqtt, PiscineController.Config.PoolConfig cfg,
+        MqttService mqtt, PoolConfig cfg,
         ILogger<ElectrolyzerService> logger)
     {
         _state = state; _relay = relay;
