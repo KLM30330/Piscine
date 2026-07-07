@@ -6,7 +6,7 @@ using PiscineController;
 
 namespace PiscineController.Services;
 
-// Publie périodiquement l'état de santé des 3 bus matériels (I2C, one-wire,
+// Publie périodiquement l'état de santé des 2 bus matériels (I2C,
 // RS485) sur MQTT, à partir des rapports remontés par chaque driver matériel
 // via EquipmentHealth. Les entités Home Assistant correspondantes sont
 // enregistrées dans MqttService.PublishHaDiscovery.
@@ -30,12 +30,10 @@ public sealed class HealthService : BackgroundService
             try
             {
                 var payload = new HealthPayload(
-                    I2cProblem:      !_health.IsOk(EquipmentBus.I2C),
-                    OneWireProblem:  !_health.IsOk(EquipmentBus.OneWire),
-                    Rs485Problem:    !_health.IsOk(EquipmentBus.Rs485),
-                    I2cLastError:     _health.LastErrorText(EquipmentBus.I2C),
-                    OneWireLastError: _health.LastErrorText(EquipmentBus.OneWire),
-                    Rs485LastError:   _health.LastErrorText(EquipmentBus.Rs485));
+                    I2cProblem:    !_health.IsOk(EquipmentBus.I2C),
+                    Rs485Problem:  !_health.IsOk(EquipmentBus.Rs485),
+                    I2cLastError:   _health.LastErrorText(EquipmentBus.I2C),
+                    Rs485LastError: _health.LastErrorText(EquipmentBus.Rs485));
 
                 await _mqtt.PublishAsync(
                     $"{_cfg.MqttPrefix}/health",

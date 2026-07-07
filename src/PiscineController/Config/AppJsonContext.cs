@@ -32,8 +32,8 @@ public sealed record DriveStatusPayload(
 // Champs "Problem" (et non "Ok") pour s'aligner directement sur le
 // device_class="problem" de Home Assistant : true = ON = problème détecté.
 public sealed record HealthPayload(
-    bool I2cProblem, bool OneWireProblem, bool Rs485Problem,
-    string I2cLastError, string OneWireLastError, string Rs485LastError);
+    bool I2cProblem, bool Rs485Problem,
+    string I2cLastError, string Rs485LastError);
 
 // Planning de filtration journalier publié sur pool/schedule après chaque
 // rebuild. StartH/EndH = heures décimales (ex. 8.5 = 08h30). Label = texte

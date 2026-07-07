@@ -2,7 +2,7 @@ using Microsoft.Extensions.Logging;
 
 namespace PiscineController;
 
-public enum EquipmentBus { I2C, OneWire, Rs485 }
+public enum EquipmentBus { I2C, Rs485 }
 
 // Suivi centralisé de l'état de communication par bus matériel.
 //
@@ -27,7 +27,6 @@ public sealed class EquipmentHealth
     private readonly Dictionary<EquipmentBus, BusState> _state = new()
     {
         [EquipmentBus.I2C]     = new(),
-        [EquipmentBus.OneWire] = new(),
         [EquipmentBus.Rs485]   = new(),
     };
 

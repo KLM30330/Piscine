@@ -257,8 +257,6 @@ public sealed class MqttService : BackgroundService
                           string unit, string? devClass,
                           string stateTopic = "sensors", string? topicOverride = null)
         {
-            // stateKey = null → topic en texte brut, pas de JSON (ex. pump_temp,
-            // publié tel quel par PumpTempService) : pas de value_template,
             // HA utilise directement le payload comme état du capteur.
             string topic = topicOverride ?? $"{dev}/{stateTopic}";
             string? template = stateKey != null ? $"{{{{ value_json.{stateKey} }}}}" : null;
@@ -372,16 +370,10 @@ public sealed class MqttService : BackgroundService
         await Sensor("pump_fault_code",  "Code défaut variateur", "FaultCode",   "",    null,          "drive");
         await Sensor("pump_fault_label", "Libellé défaut",        "FaultLabel",  "",    null,          "drive");
 
-        // ── Température pompe (sonde DS18B20 one-wire, topic dédié
-        // {prefix}/pump_temp déjà publié en texte brut par PumpTempService —
         // pas de JSON ici, contrairement aux capteurs ci-dessus) ──────────────
-        await Sensor("pump_temp", "Température pompe", null, "°C", "temperature",
-            topicOverride: $"{dev}/pump_temp");
 
         // ── Défaut sonde température pompe (lecture suspecte 0°C/85°C, ou
         // sonde absente/illisible) — topic dédié, texte brut ON/OFF ──────────
-        await BinarySensor("pump_temp_fault", "Sonde température pompe en défaut",
-            null, "problem", topicOverride: $"{dev}/pump_temp_fault");
 
         // ── Capteurs binaires variateur (topic: {prefix}/drive) ───────────────
         await BinarySensor("pump_running",     "Pompe en marche",  "IsRunning",  "running");
@@ -451,10 +443,8 @@ public sealed class MqttService : BackgroundService
         // HealthService toutes les 30s) — un binary_sensor "problème" +
         // un sensor texte de diagnostic par bus.
         await BinarySensor("health_i2c",     "Problème bus I2C",         "I2cProblem",     "problem", "health");
-        await BinarySensor("health_onewire", "Problème sonde one-wire",  "OneWireProblem", "problem", "health");
         await BinarySensor("health_rs485",   "Problème liaison RS485",   "Rs485Problem",   "problem", "health");
         await Sensor("health_i2c_error",     "Dernière erreur I2C",      "I2cLastError",     "", null, "health");
-        await Sensor("health_onewire_error", "Dernière erreur one-wire", "OneWireLastError", "", null, "health");
         await Sensor("health_rs485_error",   "Dernière erreur RS485",    "Rs485LastError",   "", null, "health");
 
         // ── Planning filtration (topic {prefix}/schedule, publié en retain

@@ -78,12 +78,6 @@ var host = Host.CreateDefaultBuilder(args)
                 sp.GetRequiredService<EquipmentHealth>(), sp.GetRequiredService<ILogger<Pcf8574>>());
         });
         services.AddSingleton(sp =>
-        {
-            var cfg = sp.GetRequiredService<PoolConfig>();
-            return new Ds18b20(sp.GetRequiredService<ILogger<Ds18b20>>(),
-                sp.GetRequiredService<EquipmentHealth>(), cfg.OnewirePumpSensorId);
-        });
-        services.AddSingleton(sp =>
             new Wk600Drive(sp.GetRequiredService<PoolConfig>(),
                 sp.GetRequiredService<ILogger<Wk600Drive>>(), sp.GetRequiredService<EquipmentHealth>()));
 
@@ -96,7 +90,7 @@ var host = Host.CreateDefaultBuilder(args)
             sp.GetRequiredService<EzoPmp>(),
             sp.GetRequiredService<ILogger<PumpPrimingService>>()));
 
-        // MqttService — singleton pour que DriveService/PumpTempService/SensorService le résolvent
+        // MqttService — singleton pour que DriveService/SensorService le résolvent
         services.AddSingleton(sp => new MqttService(
             sp.GetRequiredService<PoolConfig>(),
             sp.GetRequiredService<PoolState>(),
@@ -116,12 +110,6 @@ var host = Host.CreateDefaultBuilder(args)
             sp.GetRequiredService<MqttService>(),
             sp.GetRequiredService<PoolConfig>(),
             sp.GetRequiredService<ILogger<ElectrolyzerService>>()));
-        services.AddHostedService(sp => new PumpTempService(
-            sp.GetRequiredService<PoolConfig>(),
-            sp.GetRequiredService<PoolState>(),
-            sp.GetRequiredService<Ds18b20>(),
-            sp.GetRequiredService<MqttService>(),
-            sp.GetRequiredService<ILogger<PumpTempService>>()));
         services.AddHostedService(sp => new DriveService(
             sp.GetRequiredService<PoolConfig>(),
             sp.GetRequiredService<PoolState>(),

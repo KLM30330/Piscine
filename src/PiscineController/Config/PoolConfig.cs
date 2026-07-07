@@ -31,9 +31,6 @@ public sealed class PoolConfig
     public int ElectrolyzerStopH  { get; set; } = 22;
 
     // 1-Wire DS18B20
-    public string? OnewirePumpSensorId { get; set; } = "28-0103804a321b";
-    public double PumpTempAlertC { get; set; } = 60.0;
-    public double PumpTempCriticalC { get; set; } = 70.0;
 
 
     // Modbus WK600-D
