@@ -1,8 +1,9 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="fr" translate="no">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=1024, height=600, user-scalable=no">
+<meta name="google" content="notranslate">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <title>Piscine</title>
 <script src="https://unpkg.com/mqtt@5/dist/mqtt.min.js"></script>
 <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
@@ -11,18 +12,14 @@
 <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&family=Nunito+Sans:wght@400;600&display=swap" rel="stylesheet">
 <style>
 :root {
-  --bg:       #f0f6ff;
+  --bg:       #f0f4f8;
   --card:     #ffffff;
-  --card2:    #f8fbff;
-  --border:   rgba(0,0,0,.06);
-  --shadow:   0 2px 12px rgba(60,100,180,.08), 0 1px 3px rgba(0,0,0,.06);
-  --shadow-lg:0 8px 24px rgba(60,100,180,.12), 0 2px 6px rgba(0,0,0,.07);
-
+  --border:   rgba(0,0,0,.07);
+  --shadow:   0 2px 10px rgba(60,100,180,.07), 0 1px 3px rgba(0,0,0,.05);
   --blue:     #3b82f6;
   --blue-lt:  #eff6ff;
   --blue-med: #dbeafe;
   --teal:     #0ea5e9;
-  --teal-lt:  #e0f2fe;
   --green:    #10b981;
   --green-lt: #d1fae5;
   --amber:    #f59e0b;
@@ -30,602 +27,307 @@
   --red:      #ef4444;
   --red-lt:   #fee2e2;
   --purple:   #8b5cf6;
-  --purple-lt:#ede9fe;
-
   --text:     #1e293b;
   --text2:    #64748b;
   --text3:    #94a3b8;
-
-  --radius:   18px;
-  --radius-sm:12px;
+  --radius:   16px;
+  --radius-sm:10px;
   --sans: 'Nunito', system-ui, sans-serif;
   --sans2:'Nunito Sans', system-ui, sans-serif;
 }
 
-*, *::before, *::after {
-  box-sizing: border-box;
-  -webkit-tap-highlight-color: transparent;
-  user-select: none;
-}
+*, *::before, *::after { box-sizing: border-box; -webkit-tap-highlight-color: transparent; user-select: none; }
+html, body { margin: 0; padding: 0; width: 100vw; height: 100vh; overflow: hidden;
+  background: var(--bg); font-family: var(--sans); color: var(--text); }
+#app { display: flex; flex-direction: column; height: 100vh; }
 
-html, body {
-  margin: 0; padding: 0;
-  width: 1024px; height: 600px;
-  overflow: hidden;
-  background: var(--bg);
-  font-family: var(--sans);
-  color: var(--text);
-}
+/* ── En-tête ── */
+header { display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 18px; background: white; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.brand { display: flex; align-items: center; gap: 10px; }
+.logo { width: 34px; height: 34px; border-radius: 10px;
+  background: linear-gradient(135deg,#0ea5e9,#3b82f6);
+  display: flex; align-items: center; justify-content: center; font-size: 17px; }
+.brand-name { font-size: 17px; font-weight: 800; color: var(--text); letter-spacing: -.02em; }
+.conn-pill { display: flex; align-items: center; gap: 5px; padding: 3px 10px;
+  border-radius: 20px; font-size: 11px; font-weight: 700;
+  background: var(--green-lt); color: var(--green); transition: all .3s; }
+.conn-pill.offline { background: var(--red-lt); color: var(--red); }
+.conn-pill.wait    { background: var(--amber-lt); color: var(--amber); }
+.pill-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor;
+  animation: pulse 2s ease-in-out infinite; }
+@keyframes pulse { 0%,100%{opacity:1}50%{opacity:.4} }
+.clock { font-size: 20px; font-weight: 800; color: var(--text); letter-spacing: -.02em; }
 
-#app { display: flex; flex-direction: column; height: 600px; }
+/* ── Bandeaux ── */
+.fault-bar { background: var(--red); color: white; font-size: 12px; font-weight: 700;
+  padding: 5px 18px; text-align: center; flex-shrink: 0; animation: faultBlink 1.5s ease-in-out infinite; }
+@keyframes faultBlink { 0%,100%{opacity:1}50%{opacity:.7} }
+@keyframes alertBlink { 0%,100%{background:var(--red-lt)}50%{background:var(--red);color:white} }
 
-/* ══════════════════════════════════════════════════════
-   ONGLETS
-══════════════════════════════════════════════════════ */
-.tab-bar {
-  display: flex; gap: 0;
-  background: white;
-  border-bottom: 1px solid var(--border);
-  flex-shrink: 0;
-  padding: 0 16px;
-}
+.alert-bar { background: var(--red-lt); border-bottom: 2px solid var(--red);
+  animation: alertBlink 1s ease-in-out infinite;
+  padding: 5px 14px; display: flex; align-items: center; gap: 8px; flex-shrink: 0; flex-wrap: wrap; }
+.alert-bar-title { font-size: 10px; font-weight: 800; color: var(--red); flex-shrink: 0; }
+.alert-item { display: flex; align-items: center; gap: 6px; background: white;
+  border: 1.5px solid var(--red); border-radius: 8px; padding: 4px 10px; }
+.alert-item-bus  { font-size: 10px; font-weight: 800; color: var(--red); }
+.alert-item-msg  { font-size: 9px; color: #b91c1c; max-width: 250px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: var(--sans2); }
 
-.tab-btn {
-  padding: 8px 20px;
-  font-size: 13px; font-weight: 700;
-  color: var(--text3);
-  background: none; border: none;
-  border-bottom: 3px solid transparent;
-  cursor: pointer;
-  transition: color .18s, border-color .18s;
-  display: flex; align-items: center; gap: 6px;
-}
-.tab-btn.active {
-  color: var(--blue);
-  border-bottom-color: var(--blue);
-}
-.tab-btn .t-icon { font-size: 15px; }
+/* ── Onglets ── */
+.tab-bar { display: flex; background: white; border-bottom: 1px solid var(--border);
+  flex-shrink: 0; padding: 0 14px; }
+.tab-btn { padding: 7px 18px; font-size: 12px; font-weight: 800; color: var(--text3);
+  background: none; border: none; border-bottom: 3px solid transparent;
+  cursor: pointer; display: flex; align-items: center; gap: 5px; transition: all .18s; }
+.tab-btn.active { color: var(--blue); border-bottom-color: var(--blue); }
 
-/* ══════════════════════════════════════════════════════
-   VUE GRAPHIQUES
-══════════════════════════════════════════════════════ */
-.charts-view {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 10px;
-  padding: 10px 12px;
-  flex: 1;
-  overflow: hidden;
-}
+/* ── Corps ── */
+main { display: flex; flex: 1; padding: 8px 10px; gap: 8px; overflow: hidden; }
 
-.chart-card {
-  background: var(--card);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow);
-  padding: 12px 14px;
-  display: flex; flex-direction: column;
-}
+/* ── Grille capteurs ── */
+.col-sensors { display: grid; grid-template-columns: repeat(3,1fr);
+  grid-template-rows: repeat(2,1fr); gap: 6px; flex: 1.1; }
 
-.chart-header {
-  display: flex; align-items: center; justify-content: space-between;
-  margin-bottom: 8px;
-  flex-shrink: 0;
-}
+/* ── Colonne contrôles ── */
+.col-control { display: flex; flex-direction: column; gap: 7px; flex: 1.4; }
 
-.chart-title {
-  font-size: 12px; font-weight: 800;
-  letter-spacing: .05em; text-transform: uppercase;
-  color: var(--text2);
-  display: flex; align-items: center; gap: 6px;
-}
-
-.chart-current {
-  font-size: 20px; font-weight: 800;
-  letter-spacing: -.02em;
-  color: var(--text);
-}
-.chart-current .cu { font-size: 12px; color: var(--text3); font-weight: 600; }
-
-.chart-wrap {
-  flex: 1;
-  position: relative;
-  min-height: 0;
-}
-
-.chart-wrap canvas {
-  position: absolute; inset: 0;
-  width: 100% !important;
-  height: 100% !important;
-}
-
-.chart-footer {
-  font-size: 10px; color: var(--text3);
-  text-align: center;
-  margin-top: 6px;
-  flex-shrink: 0;
-}
-
-/* ══════════════════════════════════════════════════════
-   VEILLE ÉCRAN
-══════════════════════════════════════════════════════ */
-.sleep-overlay {
-  position: fixed; inset: 0; z-index: 9999;
-  background: #000;
-  display: flex; align-items: center; justify-content: center;
-  cursor: pointer;
-}
-
-.sleep-hint {
-  color: rgba(255,255,255,.18);
-  font-size: 15px; font-weight: 600;
-  font-family: var(--sans);
-  letter-spacing: .04em;
-  animation: breathe 3s ease-in-out infinite;
-}
-
-@keyframes breathe {
-  0%,100% { opacity: .4 }
-  50%      { opacity: 1  }
-}
-
-.fade-enter-active, .fade-leave-active { transition: opacity .6s ease; }
-.fade-enter-from,  .fade-leave-to      { opacity: 0; }
-
-
-header {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 10px 20px 8px;
-  background: white;
-  border-bottom: 1px solid var(--border);
-  flex-shrink: 0;
-}
-
-.brand {
-  display: flex; align-items: center; gap: 10px;
-}
-
-.logo {
-  width: 36px; height: 36px; border-radius: 10px;
-  background: linear-gradient(135deg, #0ea5e9, #3b82f6);
-  display: flex; align-items: center; justify-content: center;
-  font-size: 18px; box-shadow: 0 2px 8px rgba(14,165,233,.35);
-}
-
-.brand-name {
-  font-size: 18px; font-weight: 800;
-  color: var(--text);
-  letter-spacing: -.02em;
-}
-
-.brand-status {
-  display: flex; align-items: center; gap: 6px;
-  font-size: 12px; color: var(--text3);
-  font-family: var(--sans2);
-}
-
-.pill {
-  display: inline-flex; align-items: center; gap: 5px;
-  padding: 3px 10px; border-radius: 20px;
-  font-size: 12px; font-weight: 600;
-  background: var(--green-lt); color: var(--green);
-}
-.pill.offline { background: var(--red-lt); color: var(--red); }
-.pill.wait    { background: var(--amber-lt); color: var(--amber); }
-.pill-dot {
-  width: 6px; height: 6px; border-radius: 50%;
-  background: currentColor;
-  animation: pulse 2s ease-in-out infinite;
-}
-@keyframes pulse { 0%,100% { opacity:1 } 50% { opacity:.4 } }
-
-.clock {
-  font-size: 22px; font-weight: 700;
-  color: var(--text);
-  letter-spacing: -.02em;
-}
-
-/* ══════════════════════════════════════════════════════
-   BANDEAU DÉFAUT
-══════════════════════════════════════════════════════ */
-.fault-bar {
-  background: var(--red); color: white;
-  font-size: 13px; font-weight: 700;
-  padding: 6px 20px;
-  text-align: center;
-  flex-shrink: 0;
-}
-
-/* ══════════════════════════════════════════════════════
-   CORPS
-══════════════════════════════════════════════════════ */
-main {
-  display: flex; flex: 1;
-  padding: 8px 10px;
-  gap: 8px;
-  overflow: hidden;
-}
-
-/* ── Grille 3×2 capteurs ── */
-.col-sensors {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  grid-template-rows: repeat(2, 1fr);
-  gap: 6px;
-  flex: 1.1;
-}
-.sensor-card:last-child {
-  grid-column: 2;
-}
-
-/* ── Panneau de commande ── */
-.col-control {
-  display: flex; flex-direction: column;
-  gap: 8px;
-  flex: 1.4;
-}
-
-/* ══════════════════════════════════════════════════════
-   CARTES CAPTEUR
-══════════════════════════════════════════════════════ */
-.sensor-card {
-  background: var(--card);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow);
-  padding: 5px 8px;
-  display: flex; flex-direction: column;
-  position: relative;
-  overflow: hidden;
-  transition: box-shadow .2s;
-}
-
-/* Bande colorée en haut */
-.sensor-card::before {
-  content: '';
-  position: absolute; top: 0; left: 0; right: 0; height: 4px;
-  background: var(--card-accent, var(--blue));
-  border-radius: var(--radius) var(--radius) 0 0;
-}
-
+/* ── Cartes capteurs ── */
+.sensor-card { background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow);
+  padding: 6px 9px; display: flex; flex-direction: column; position: relative; overflow: hidden; }
+.sensor-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+  background: var(--card-accent, var(--blue)); border-radius: var(--radius) var(--radius) 0 0; }
 .sensor-card.warn  { --card-accent: var(--amber); background: var(--amber-lt); }
 .sensor-card.bad   { --card-accent: var(--red);   background: var(--red-lt); }
+.sensor-card:last-child { grid-column: 2; }
 
-.card-top {
-  display: flex; align-items: center; justify-content: space-between;
-  margin-bottom: 2px;
-}
+.card-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 2px; }
+.card-icon { font-size: 13px; }
+.card-badge { font-size: 8px; font-weight: 700; padding: 1px 5px; border-radius: 20px; }
+.card-badge.ok   { background: var(--green-lt); color: #065f46; }
+.card-badge.warn { background: var(--amber-lt); color: #92400e; }
+.card-badge.bad  { background: var(--red-lt);   color: #991b1b; }
+.card-badge.off  { background: #f1f5f9;          color: var(--text3); }
+.card-label { font-size: 8px; font-weight: 700; color: var(--text2);
+  letter-spacing: .04em; text-transform: uppercase; }
+.card-value { font-size: 23px; font-weight: 800; color: var(--text);
+  line-height: 1; letter-spacing: -.03em; }
+.sensor-card.warn .card-value { color: #92400e; }
+.sensor-card.bad  .card-value { color: var(--red); }
+.card-unit { font-size: 11px; color: var(--text3); font-weight: 600; }
+.card-sub { font-size: 9px; color: var(--text3); margin-top: 2px; }
 
-.card-icon {
-  font-size: 14px; line-height: 1;
-}
+/* ── Cartes contrôle ── */
+.ctrl-card { background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow); padding: 10px 13px; }
+.freq-card.ctrl-card { padding: 5px 10px; }
+.section-title { font-size: 9px; font-weight: 800; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--text3); margin-bottom: 4px; }
 
-.card-badge {
-  display: inline-flex; align-items: center; gap: 4px;
-  font-size: 10px; font-weight: 700;
-  padding: 2px 7px; border-radius: 20px;
-  background: var(--blue-lt); color: var(--blue);
-}
-.card-badge.ok    { background: var(--green-lt); color: var(--green); }
-.card-badge.warn  { background: var(--amber-lt); color: var(--amber); }
-.card-badge.bad   { background: var(--red-lt);   color: var(--red);   }
-.card-badge.off   { background: #f1f5f9;          color: var(--text3); }
-
-.card-label {
-  font-size: 11px; font-weight: 700;
-  color: var(--text2);
-  letter-spacing: .03em; text-transform: uppercase;
-}
-
-.card-value-row {
-  display: flex; align-items: baseline; gap: 3px;
-  margin-top: 2px;
-}
-
-.card-value {
-  font-size: 22px; font-weight: 800;
-  color: var(--text);
-  line-height: 1;
-  letter-spacing: -.03em;
-}
-.sensor-card.warn .card-value { color: var(--amber); }
-.sensor-card.bad  .card-value { color: var(--red);   }
-
-.card-unit {
-  font-size: 15px; font-weight: 600;
-  color: var(--text3);
-}
-
-.card-sub {
-  font-size: 10px; color: var(--text3);
-  margin-top: 2px;
-}
-.card-sub.good { color: var(--green); font-weight: 700; }
-
-/* ══════════════════════════════════════════════════════
-   PANNEAU DE COMMANDE
-══════════════════════════════════════════════════════ */
-.control-card {
-  background: var(--card);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow);
-  padding: 14px 16px;
-}
-
-.section-title {
-  font-size: 11px; font-weight: 800;
-  letter-spacing: .08em; text-transform: uppercase;
-  color: var(--text3);
-  margin-bottom: 10px;
-}
-
-/* ── Sélecteur de mode ── */
-.mode-grid {
-  display: grid; grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
-}
-
-.mode-btn {
-  background: var(--bg);
-  border: 2px solid var(--border);
-  border-radius: 14px;
-  padding: 20px 8px 18px;
-  min-height: 80px;
-  cursor: pointer;
-  text-align: center;
-  transition: all .18s;
-  display: flex; flex-direction: column; align-items: center; gap: 6px;
-  box-shadow: 0 1px 4px rgba(0,0,0,.06);
-}
-.mode-btn .m-icon  { font-size: 32px; line-height: 1; }
-.mode-btn .m-label {
-  font-size: 16px; font-weight: 800;
-  color: var(--text2);
-}
-
-.mode-btn.active {
-  background: var(--blue-lt);
-  border-color: var(--blue);
-  box-shadow: 0 0 0 3px rgba(59,130,246,.12);
-}
+/* ── Switches de mode ── */
+.mode-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 6px; }
+.mode-btn { background: var(--bg); border: 2px solid var(--border); border-radius: var(--radius-sm);
+  padding: 13px 6px 11px; cursor: pointer; text-align: center;
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  min-height: 72px; transition: all .18s; box-shadow: 0 1px 3px rgba(0,0,0,.05); }
+.mode-btn .m-icon  { font-size: 26px; line-height: 1; }
+.mode-btn .m-label { font-size: 13px; font-weight: 800; color: var(--text2); }
+.mode-btn.active   { background: var(--blue-lt); border-color: var(--blue);
+  box-shadow: 0 0 0 3px rgba(59,130,246,.1); }
 .mode-btn.active .m-label { color: var(--blue); }
-
-.mode-btn.active-stop {
-  background: var(--red-lt);
-  border-color: var(--red);
-  box-shadow: 0 0 0 3px rgba(239,68,68,.12);
-}
+.mode-btn.active-stop   { background: var(--red-lt); border-color: var(--red);
+  box-shadow: 0 0 0 3px rgba(239,68,68,.1); }
 .mode-btn.active-stop .m-label { color: var(--red); }
 
 /* ── Curseur fréquence ── */
-.freq-card {
-  flex: 1;
-  display: flex; flex-direction: column; justify-content: center;
-}
+.freq-card { flex: 1; display: flex; flex-direction: column; justify-content: center; }
+.freq-header { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 2px; }
+.freq-value { font-size: 20px; font-weight: 800; color: var(--text); letter-spacing: -.02em; }
+.freq-value .fu { font-size: 13px; color: var(--text3); font-weight: 600; }
 
-.freq-header {
-  display: flex; align-items: baseline; justify-content: space-between;
-  margin-bottom: 6px;
-}
-
-.freq-value {
-  font-size: 26px; font-weight: 800;
-  color: var(--text);
-  letter-spacing: -.02em;
-}
-.freq-value .fu { font-size: 14px; color: var(--text3); font-weight: 600; }
-
-input[type=range] {
-  -webkit-appearance: none;
-  width: 100%; height: 44px;
-  background: transparent; cursor: pointer;
-}
-input[type=range]::-webkit-slider-runnable-track {
-  height: 8px;
+input[type=range] { -webkit-appearance: none; width: 100%; height: 32px; background: transparent; cursor: pointer; }
+input[type=range]::-webkit-slider-runnable-track { height: 7px;
   background: linear-gradient(90deg, var(--blue) var(--pct,50%), #e2e8f0 var(--pct,50%));
-  border-radius: 4px;
-}
-input[type=range]::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  width: 32px; height: 32px;
-  margin-top: -12px;
-  border-radius: 50%;
-  background: white;
-  border: 3px solid var(--blue);
-  box-shadow: 0 2px 8px rgba(59,130,246,.3), 0 0 0 4px rgba(59,130,246,.08);
-}
-
-.freq-hint {
-  font-size: 10px; color: var(--text3);
-  text-align: center; margin-top: 2px;
-  font-family: var(--sans2);
-}
+  border-radius: 4px; }
+input[type=range]::-webkit-slider-thumb { -webkit-appearance: none;
+  width: 32px; height: 32px; margin-top: -13px; border-radius: 50%;
+  background: white; border: 3px solid var(--blue);
+  box-shadow: 0 2px 8px rgba(59,130,246,.25), 0 0 0 4px rgba(59,130,246,.08); }
+.freq-hint { font-size: 9px; color: var(--text3); text-align: center; font-family: var(--sans2); }
 
 /* ── Boutons d'action ── */
-.action-row { display: flex; gap: 8px; }
+.actions { display: flex; gap: 7px; }
+.action-btn { flex: 1; background: var(--card); border: 2px solid var(--border);
+  border-radius: var(--radius-sm); padding: 14px 8px; cursor: pointer; text-align: center;
+  min-height: 82px; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 4px; transition: all .18s; box-shadow: 0 1px 4px rgba(0,0,0,.05); }
+.action-btn .a-icon  { font-size: 24px; }
+.action-btn .a-label { font-size: 12px; font-weight: 800; color: var(--text); }
+.action-btn .a-sub   { font-size: 9px; color: var(--text3); font-family: var(--sans2); }
+.action-btn.confirm  { background: var(--amber-lt); border-color: var(--amber); }
+.action-btn.confirm .a-label { color: #92400e; }
+.action-btn.busy     { background: var(--green-lt); border-color: var(--green); }
+.action-btn.busy .a-label { color: #065f46; }
 
-.action-btn {
-  flex: 1;
-  background: var(--card);
-  border: 2px solid var(--border);
-  border-radius: 14px;
-  padding: 20px 8px;
-  min-height: 90px;
-  cursor: pointer;
-  text-align: center;
-  transition: all .18s;
-  box-shadow: 0 1px 4px rgba(0,0,0,.06);
-}
-.action-btn .a-icon  { font-size: 30px; display: block; margin-bottom: 8px; }
-.action-btn .a-label { font-size: 14px; font-weight: 800; color: var(--text); display: block; }
-.action-btn .a-sub   { font-size: 11px; color: var(--text3); font-family: var(--sans2); }
 
-.action-btn.confirm {
-  background: var(--amber-lt);
-  border-color: var(--amber);
+/* ── Toggle électrolyseur ── */
+.elec-toggle {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-top: 8px; padding: 6px 8px;
+  background: var(--bg); border-radius: 8px;
+  border: 1.5px solid var(--border);
 }
-.action-btn.confirm .a-label { color: var(--amber); }
+.elec-toggle-label { font-size: 11px; font-weight: 700; color: var(--text2); }
+.toggle-switch {
+  position: relative; width: 50px; height: 27px;
+  cursor: pointer; flex-shrink: 0;
+}
+.toggle-switch input { opacity: 0; width: 0; height: 0; position: absolute; }
+.toggle-track {
+  position: absolute; inset: 0; border-radius: 27px;
+  background: #e2e8f0; transition: background .25s;
+}
+.toggle-track.on { background: var(--green); }
+.toggle-thumb {
+  position: absolute; top: 3px; left: 3px;
+  width: 21px; height: 21px; border-radius: 50%;
+  background: white; transition: left .25s;
+  box-shadow: 0 1px 4px rgba(0,0,0,.2);
+}
+.toggle-thumb.on { left: 26px; }
 
-.action-btn.busy {
-  background: var(--green-lt);
-  border-color: var(--green);
-}
-.action-btn.busy .a-label { color: var(--green); }
+/* ── Vue graphiques ── */
+.charts-view { display: grid; grid-template-columns: repeat(3,1fr); gap: 10px;
+  padding: 10px; flex: 1; overflow: hidden; }
+.chart-card { background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow);
+  padding: 10px 13px; display: flex; flex-direction: column; }
+.chart-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; flex-shrink: 0; }
+.chart-title  { font-size: 11px; font-weight: 800; text-transform: uppercase;
+  letter-spacing: .05em; color: var(--text2); }
+.chart-current { font-size: 18px; font-weight: 800; color: var(--text); letter-spacing: -.02em; }
+.chart-current .cu { font-size: 11px; color: var(--text3); font-weight: 600; }
+.chart-wrap { flex: 1; position: relative; min-height: 0; }
+.chart-wrap canvas { position: absolute; inset: 0; width: 100% !important; height: 100% !important; }
+.chart-footer { font-size: 9px; color: var(--text3); text-align: center;
+  margin-top: 5px; flex-shrink: 0; font-family: var(--sans2); }
 
-/* ══════════════════════════════════════════════════════
-   PIED
-══════════════════════════════════════════════════════ */
-footer {
-  display: flex; align-items: center; gap: 0;
-  padding: 5px 16px 6px;
-  background: white;
-  border-top: 1px solid var(--border);
-  flex-shrink: 0;
-}
+/* ── Pied ── */
+footer { display: flex; align-items: center; gap: 0; padding: 4px 14px 5px;
+  background: white; border-top: 1px solid var(--border); flex-shrink: 0; }
+.health-chip { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px;
+  border-radius: 20px; font-size: 10px; font-weight: 700; cursor: pointer;
+  background: var(--green-lt); color: #065f46; margin-right: 6px; transition: all .2s; }
+.health-chip.problem { background: var(--red-lt); color: var(--red);
+  animation: alertShake .4s; }
+@keyframes alertShake { 0%,100%{transform:translateX(0)}25%{transform:translateX(-3px)}75%{transform:translateX(3px)} }
+.health-chip-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.health-detail { margin-left: auto; font-size: 10px; color: var(--red);
+  max-width: 380px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+  font-family: var(--sans2); }
 
-.health-chip {
-  display: inline-flex; align-items: center; gap: 5px;
-  padding: 3px 10px; border-radius: 20px;
-  font-size: 11px; font-weight: 700;
-  cursor: pointer;
-  background: var(--green-lt); color: var(--green);
-  margin-right: 6px;
-  transition: background .2s, color .2s;
-}
-.health-chip.problem {
-  background: var(--red-lt); color: var(--red);
-  animation: alertShake .4s;
-}
-@keyframes alertShake {
-  0%,100%{transform:translateX(0)} 25%{transform:translateX(-3px)} 75%{transform:translateX(3px)}
-}
-.health-chip-dot {
-  width: 6px; height: 6px; border-radius: 50%;
-  background: currentColor;
-}
-
-.health-detail {
-  margin-left: auto;
-  font-size: 11px; color: var(--red);
-  max-width: 400px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
-  font-family: var(--sans2);
-}
+/* ── Veille ── */
+.sleep-overlay { position: fixed; inset: 0; z-index: 9999; background: #000;
+  display: flex; align-items: center; justify-content: center; cursor: pointer; }
+.sleep-hint { color: rgba(255,255,255,.2); font-size: 14px; font-weight: 600;
+  animation: breathe 3s ease-in-out infinite; }
+@keyframes breathe { 0%,100%{opacity:.4}50%{opacity:1} }
+.fade-enter-active, .fade-leave-active { transition: opacity .6s; }
+.fade-enter-from, .fade-leave-to { opacity: 0; }
 </style>
 </head>
 <body>
 <div id="app">
 
-  <!-- ── Overlay veille ── -->
   <transition name="fade">
     <div v-if="sleeping" class="sleep-overlay">
       <div class="sleep-hint">Toucher l'écran pour réactiver</div>
     </div>
   </transition>
 
-  <!-- EN-TÊTE -->
   <header>
     <div class="brand">
       <div class="logo">🏊</div>
-      <div>
-        <div class="brand-name">Ma Piscine</div>
-        <div class="brand-status">Système de pilotage automatique</div>
-      </div>
+      <div><div class="brand-name">Ma Piscine</div></div>
     </div>
-
-    <div class="pill" :class="connPill.cls">
-      <span class="pill-dot"></span>
-      {{ connPill.label }}
+    <div class="conn-pill" :class="connPill.cls">
+      <span class="pill-dot"></span>{{ connPill.label }}
     </div>
-
     <div class="clock">{{ clock }}</div>
   </header>
 
-  <!-- BANDEAU DÉFAUT -->
   <div v-if="drive.isFault" class="fault-bar">
     ⚠️ Défaut variateur — {{ drive.faultLabel }} (code {{ drive.faultCode }})
   </div>
 
-  <!-- ONGLETS -->
+  <div v-if="hasEquipmentAlert" class="alert-bar">
+    <div class="alert-bar-title">⚠ Équipement</div>
+    <div v-for="h in healthItems.filter(h => h.problem)" :key="h.id" class="alert-item">
+      <span>{{ h.icon }}</span>
+      <div>
+        <div class="alert-item-bus">{{ h.label }} en défaut</div>
+        <div class="alert-item-msg">{{ h.error }}</div>
+      </div>
+    </div>
+  </div>
+
   <div class="tab-bar">
-    <button class="tab-btn" :class="{ active: activeTab === 'dashboard' }"
-      @click="activeTab = 'dashboard'">
-      <span class="t-icon">📊</span> Tableau de bord
+    <button class="tab-btn" :class="{ active: activeTab==='dashboard' }" @click="activeTab='dashboard'">
+      📊 Tableau de bord
     </button>
-    <button class="tab-btn" :class="{ active: activeTab === 'charts' }"
-      @click="activeTab = 'charts'">
-      <span class="t-icon">📈</span> Graphiques
+    <button class="tab-btn" :class="{ active: activeTab==='charts' }" @click="activeTab='charts'">
+      📈 Graphiques
     </button>
   </div>
 
-  <!-- CORPS DASHBOARD -->
-  <main v-if="activeTab === 'dashboard'">
+  <main v-if="activeTab==='dashboard'">
 
-    <!-- Grille capteurs -->
     <div class="col-sensors">
 
-      <!-- pH -->
-      <div class="sensor-card" :class="{ bad: sensors.phAlarmLow }"
-        style="--card-accent: #8b5cf6">
+      <div class="sensor-card" :class="{ bad: sensors.phAlarmLow }" style="--card-accent:#8b5cf6">
         <div class="card-top">
           <span class="card-icon">🧪</span>
           <span class="card-badge" :class="sensors.phAlarmLow ? 'bad' : 'ok'">
             {{ sensors.phAlarmLow ? 'Alarme' : 'OK' }}
           </span>
         </div>
-        <div class="card-label">pH de l'eau</div>
-        <div class="card-value-row">
-          <span class="card-value">{{ sensors.ph }}</span>
-        </div>
-        <div class="card-sub">Cible : 7.20</div>
+        <div class="card-label">pH</div>
+        <div class="card-value">{{ sensors.ph }}</div>
+        <div class="card-sub">Cible 7.20</div>
       </div>
 
-      <!-- ORP -->
-      <div class="sensor-card" :class="orpCardClass"
-        style="--card-accent: #0ea5e9">
+      <div class="sensor-card" :class="orpCardClass" style="--card-accent:#0ea5e9">
         <div class="card-top">
           <span class="card-icon">⚡</span>
           <span class="card-badge" :class="orpBadgeCls">{{ orpZone.label }}</span>
         </div>
         <div class="card-label">Redox (ORP)</div>
-        <div class="card-value-row">
-          <span class="card-value">{{ sensors.orp }}</span>
-          <span class="card-unit">mV</span>
-        </div>
-        <div class="card-sub" :class="{ good: orpZone.cls === 'state-good' }">
-          Optimal : 650–750 mV
-        </div>
+        <div class="card-value">{{ sensors.orp }}<span class="card-unit"> mV</span></div>
+        <div class="card-sub">Optimal : 650–750 mV</div>
       </div>
 
-      <!-- Température eau -->
-      <div class="sensor-card" style="--card-accent: #f59e0b">
+      <div class="sensor-card" style="--card-accent:#f59e0b">
         <div class="card-top">
           <span class="card-icon">🌡️</span>
           <span class="card-badge ok">Eau</span>
         </div>
         <div class="card-label">Température</div>
-        <div class="card-value-row">
-          <span class="card-value">{{ sensors.waterTemp }}</span>
-          <span class="card-unit">°C</span>
-        </div>
+        <div class="card-value">{{ sensors.waterTemp }}<span class="card-unit">°C</span></div>
         <div class="card-sub">Filtration : {{ sensors.targetFreq }} Hz cible</div>
       </div>
 
-      <!-- Pompe -->
-      <div class="sensor-card" style="--card-accent: #3b82f6">
+      <div class="sensor-card" style="--card-accent:#3b82f6">
         <div class="card-top">
           <span class="card-icon">🔄</span>
           <span class="card-badge" :class="drive.isRunning ? 'ok' : 'off'">
             {{ drive.isRunning ? 'En marche' : 'Arrêtée' }}
           </span>
         </div>
-        <div class="card-label">Pompe filtration</div>
-        <div class="card-value-row">
-          <span class="card-value">{{ drive.freq }}</span>
-          <span class="card-unit">Hz</span>
-        </div>
+        <div class="card-label">Pompe</div>
+        <div class="card-value">{{ drive.freq }}<span class="card-unit"> Hz</span></div>
         <div class="card-sub">Mode : {{ sensors.filterMode }}</div>
       </div>
 
-      <!-- Électrolyseur -->
-      <div class="sensor-card" style="--card-accent: #10b981">
+      <div class="sensor-card" style="--card-accent:#10b981">
         <div class="card-top">
           <span class="card-icon">⚗️</span>
           <span class="card-badge" :class="elecOn ? 'ok' : 'off'">
@@ -633,26 +335,27 @@ footer {
           </span>
         </div>
         <div class="card-label">Électrolyseur</div>
-        <div class="card-value-row" style="margin-top:8px">
-          <span style="font-size:28px;font-weight:800;letter-spacing:-.02em;color:var(--text)">
-            {{ elecOn ? 'En marche' : 'Arrêté' }}
-          </span>
+        <div style="font-size:17px;font-weight:800;letter-spacing:-.02em;color:var(--text);margin-top:3px">
+          {{ elecOn ? 'En marche' : 'Arrêté' }}
         </div>
-        <div class="card-sub">Relais PCF8574</div>
+        <div class="elec-toggle" @click.stop="toggleElec">
+          <span class="elec-toggle-label">{{ elecEnabled ? 'Activé' : 'Désactivé' }}</span>
+          <div class="toggle-switch">
+            <div class="toggle-track" :class="{ on: elecEnabled }"></div>
+            <div class="toggle-thumb" :class="{ on: elecEnabled }"></div>
+          </div>
+        </div>
       </div>
 
     </div>
 
-    <!-- Panneau de commande -->
     <div class="col-control">
 
-      <!-- Mode filtration -->
-      <div class="control-card">
+      <div class="ctrl-card">
         <div class="section-title">Mode filtration</div>
         <div class="mode-grid">
           <button v-for="m in modes" :key="m.key"
-            class="mode-btn"
-            :class="getModeClass(m.key)"
+            class="mode-btn" :class="getModeClass(m.key)"
             @click="sendMode(m.key)">
             <span class="m-icon">{{ m.icon }}</span>
             <span class="m-label">{{ m.label }}</span>
@@ -660,27 +363,22 @@ footer {
         </div>
       </div>
 
-      <!-- Fréquence -->
-      <div class="control-card freq-card">
+      <div class="ctrl-card freq-card">
         <div class="section-title">Fréquence de la pompe</div>
         <div class="freq-header">
-          <span style="font-size:12px;color:var(--text3)">30 Hz</span>
+          <span style="font-size:11px;color:var(--text3)">30 Hz</span>
           <span class="freq-value">{{ freqDisplay }} <span class="fu">Hz</span></span>
-          <span style="font-size:12px;color:var(--text3)">50 Hz</span>
+          <span style="font-size:11px;color:var(--text3)">50 Hz</span>
         </div>
         <input type="range" min="30" max="50" step="0.5"
-          v-model="freqSlider"
-          :style="{ '--pct': freqPct }"
-          @input="onFreqInput"
-          @change="sendFreq"
-          @touchend="sendFreq">
-        <div class="freq-hint">Relâcher le curseur pour envoyer · bascule en mode forcé</div>
+          v-model="freqSlider" :style="{ '--pct': freqPct }"
+          @input="onFreqInput" @change="sendFreq" @touchend="sendFreq">
+        <div class="freq-hint">Relâcher pour envoyer · bascule en mode forcé</div>
       </div>
 
-      <!-- Actions -->
-      <div class="control-card" style="padding:12px 14px">
+      <div class="ctrl-card" style="padding:10px 13px">
         <div class="section-title">Actions</div>
-        <div class="action-row">
+        <div class="actions">
           <div class="action-btn" :class="btnPrimeState.cls" @click="handleAction('prime')">
             <span class="a-icon">💊</span>
             <span class="a-label">{{ btnPrimeState.label }}</span>
@@ -697,54 +395,38 @@ footer {
     </div>
   </main>
 
-  <!-- VUE GRAPHIQUES -->
-  <div v-if="activeTab === 'charts'" class="charts-view">
-
-    <!-- Température eau -->
+  <div v-if="activeTab==='charts'" class="charts-view">
     <div class="chart-card">
       <div class="chart-header">
         <div class="chart-title">🌡️ Température eau</div>
         <div class="chart-current">{{ sensors.waterTemp }}<span class="cu"> °C</span></div>
       </div>
-      <div class="chart-wrap">
-        <canvas ref="chartTemp"></canvas>
-      </div>
+      <div class="chart-wrap"><canvas ref="chartTemp"></canvas></div>
       <div class="chart-footer">{{ historyLabel }}</div>
     </div>
-
-    <!-- pH -->
     <div class="chart-card">
       <div class="chart-header">
         <div class="chart-title">🧪 pH</div>
         <div class="chart-current">{{ sensors.ph }}</div>
       </div>
-      <div class="chart-wrap">
-        <canvas ref="chartPh"></canvas>
-      </div>
+      <div class="chart-wrap"><canvas ref="chartPh"></canvas></div>
       <div class="chart-footer">{{ historyLabel }}</div>
     </div>
-
-    <!-- ORP -->
     <div class="chart-card">
       <div class="chart-header">
         <div class="chart-title">⚡ Redox (ORP)</div>
         <div class="chart-current">{{ sensors.orp }}<span class="cu"> mV</span></div>
       </div>
-      <div class="chart-wrap">
-        <canvas ref="chartOrp"></canvas>
-      </div>
+      <div class="chart-wrap"><canvas ref="chartOrp"></canvas></div>
       <div class="chart-footer">{{ historyLabel }}</div>
     </div>
-
   </div>
 
-  <!-- PIED -->
   <footer>
     <div v-for="h in healthItems" :key="h.id"
       class="health-chip" :class="{ problem: h.problem }"
       @click="healthDetail = h.problem ? h.error : ''">
-      <div class="health-chip-dot"></div>
-      {{ h.label }}
+      <div class="health-chip-dot"></div>{{ h.label }}
     </div>
     <div class="health-detail">{{ healthDetail }}</div>
   </footer>
@@ -754,205 +436,50 @@ footer {
 <script>
 const { createApp, ref, computed, reactive, onMounted, watch, nextTick } = Vue;
 
-<<<<<<< HEAD
 const MQTT_URL    = "ws://192.168.1.100:9001";
-=======
-const MQTT_URL    = "ws://192.168.1.100:1884";
->>>>>>> 098780feaa0c250295156f7349de7f541f2661b0
 const MQTT_USER   = "MQTT_Piscine";
 const MQTT_PASS   = "";
 const MQTT_PREFIX = "pool";
 
 const ORP_ZONES = [
-  { max: 550,      label: 'Critique',     cls: 'state-danger' },
-  { max: 620,      label: 'Bas',          cls: 'state-warn'   },
-  { max: 650,      label: 'Limite basse', cls: 'state-warn'   },
-  { max: 750,      label: 'Optimal',      cls: 'state-good'   },
-  { max: 800,      label: 'Limite haute', cls: 'state-warn'   },
-  { max: Infinity, label: 'Surdosage',    cls: 'state-warn'   },
+  { max: 550,      label: 'Critique',     cls: 'bad'  },
+  { max: 620,      label: 'Bas',          cls: 'warn' },
+  { max: 650,      label: 'Limite basse', cls: 'warn' },
+  { max: 750,      label: 'Optimal',      cls: ''     },
+  { max: 800,      label: 'Limite haute', cls: 'warn' },
+  { max: Infinity, label: 'Surdosage',    cls: 'warn' },
 ];
 
 createApp({
   setup() {
-    const connState = ref('');
-    const clock     = ref('--:--:--');
-    const sleeping  = ref(false);
-    const activeTab = ref('dashboard');
-
-    /* ── Historique (60 points max = ~5 min à 5s/cycle) ── */
-    const MAX_POINTS  = 60;
-    const history     = reactive({ temp: [], ph: [], orp: [], labels: [] });
-
-    function pushHistory(temp, ph, orp) {
-      const t = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-      const push = (arr, val) => { arr.push(val); if (arr.length > MAX_POINTS) arr.shift(); };
-      push(history.temp,   parseFloat(temp) || null);
-      push(history.ph,     parseFloat(ph)   || null);
-      push(history.orp,    parseFloat(orp)  || null);
-      push(history.labels, t);
-      updateCharts();
-    }
-
-    const historyLabel = computed(() =>
-      `${history.labels.length} relevés · ${history.labels.at(0) || '--'} → ${history.labels.at(-1) || '--'}`
-    );
-
-    /* ── Refs canvas ── */
-    const chartTemp = ref(null);
-    const chartPh   = ref(null);
-    const chartOrp  = ref(null);
-    let   charts    = {};
-
-    const CHART_DEFAULTS = {
-      type: 'line',
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        animation: false,
-        plugins: { legend: { display: false }, tooltip: {
-          backgroundColor: 'rgba(255,255,255,.95)',
-          titleColor: '#1e293b',
-          bodyColor: '#64748b',
-          borderColor: '#e2e8f0',
-          borderWidth: 1,
-          padding: 8,
-          callbacks: { title: items => items[0].label }
-        }},
-        scales: {
-          x: {
-            display: false,
-            grid: { display: false },
-          },
-          y: {
-            grid: { color: '#f1f5f9', drawBorder: false },
-            ticks: {
-              font: { size: 10, family: "'Nunito', sans-serif" },
-              color: '#94a3b8',
-              maxTicksLimit: 5,
-            },
-            border: { display: false },
-          }
-        },
-        elements: {
-          point: { radius: 0, hoverRadius: 4 },
-          line: { tension: 0.35, borderWidth: 2.5 }
-        }
-      }
-    };
-
-    function makeDataset(color, fill) {
-      return {
-        data: [],
-        borderColor: color,
-        backgroundColor: fill,
-        fill: true,
-        pointBackgroundColor: color,
-      };
-    }
-
-    function initCharts() {
-      const labels = history.labels;
-
-      charts.temp = new Chart(chartTemp.value, {
-        ...CHART_DEFAULTS,
-        data: {
-          labels,
-          datasets: [makeDataset('#f59e0b', 'rgba(245,158,11,.08)')]
-        },
-        options: { ...CHART_DEFAULTS.options,
-          scales: { ...CHART_DEFAULTS.options.scales,
-            y: { ...CHART_DEFAULTS.options.scales.y,
-              min: 15, max: 40,
-              ticks: { ...CHART_DEFAULTS.options.scales.y.ticks,
-                callback: v => v + '°' }
-            }
-          }
-        }
-      });
-
-      charts.ph = new Chart(chartPh.value, {
-        ...CHART_DEFAULTS,
-        data: {
-          labels,
-          datasets: [makeDataset('#8b5cf6', 'rgba(139,92,246,.08)')]
-        },
-        options: { ...CHART_DEFAULTS.options,
-          plugins: { ...CHART_DEFAULTS.options.plugins,
-            annotation: undefined
-          },
-          scales: { ...CHART_DEFAULTS.options.scales,
-            y: { ...CHART_DEFAULTS.options.scales.y,
-              min: 6.5, max: 7.8,
-              ticks: { ...CHART_DEFAULTS.options.scales.y.ticks,
-                callback: v => v.toFixed(1) }
-            }
-          }
-        }
-      });
-
-      charts.orp = new Chart(chartOrp.value, {
-        ...CHART_DEFAULTS,
-        data: {
-          labels,
-          datasets: [makeDataset('#0ea5e9', 'rgba(14,165,233,.08)')]
-        },
-        options: { ...CHART_DEFAULTS.options,
-          scales: { ...CHART_DEFAULTS.options.scales,
-            y: { ...CHART_DEFAULTS.options.scales.y,
-              min: 400, max: 900,
-              ticks: { ...CHART_DEFAULTS.options.scales.y.ticks,
-                callback: v => v + ' mV' }
-            }
-          }
-        }
-      });
-    }
-
-    function updateCharts() {
-      if (!charts.temp) return;
-      ['temp', 'ph', 'orp'].forEach(key => {
-        charts[key].data.labels          = [...history.labels];
-        charts[key].data.datasets[0].data = [...history[key]];
-        charts[key].update('none');
-      });
-    }
-
-    /* Initialiser les charts quand on passe sur l'onglet graphiques */
-    watch(activeTab, async val => {
-      if (val === 'charts') {
-        await nextTick();
-        if (!charts.temp) initCharts();
-        else updateCharts();
-      }
-    });
+    const connState  = ref('');
+    const clock      = ref('--:--:--');
+    const sleeping   = ref(false);
+    const activeTab  = ref('dashboard');
+    const healthDetail = ref('');
 
     const connPill = computed(() => {
-      if (connState.value === 'live') return { cls: '',        label: 'En ligne' };
+      if (connState.value === 'live') return { cls: '',        label: 'En ligne'   };
       if (connState.value === 'down') return { cls: 'offline', label: 'Hors ligne' };
       return { cls: 'wait', label: 'Connexion…' };
     });
 
-    const sensors = reactive({
-      ph: '--', orp: '--', waterTemp: '--',
-      targetFreq: '--', filterMode: '--',
-      phAlarmLow: false, orpAlarm: false,
-    });
-    const drive = reactive({
-      freq: '--', isRunning: false,
-      isFault: false, faultCode: 0, faultLabel: '',
-    });
-    const elecOn       = ref(false);
-    const healthDetail = ref('');
-    const healthItems  = reactive([
-      { id: 'i2c',     label: 'I2C',      problem: false, error: '' },
-      { id: 'rs485',   label: 'RS485',    problem: false, error: '' },
-    ]);
+    const sensors = reactive({ ph:'--', orp:'--', waterTemp:'--', targetFreq:'--',
+      filterMode:'--', phAlarmLow:false, orpAlarm:false });
+    const drive = reactive({ freq:'--', isRunning:false, isFault:false, faultCode:0, faultLabel:'' });
+    const elecOn      = ref(false);
+    const elecEnabled = ref(true);  // consigne utilisateur
 
-    /* ── Modes ── */
+    const healthItems = reactive([
+      { id:'i2c',   label:'I2C',   icon:'🔌', problem:false, error:'' },
+      { id:'rs485', label:'RS485', icon:'📡', problem:false, error:'' },
+    ]);
+    const hasEquipmentAlert = computed(() => healthItems.some(h => h.problem));
+
     const modes = [
-      { key: 'auto',   label: 'Auto',  icon: '🔁' },
-      { key: 'forced', label: 'Forcé', icon: '⚡' },
-      { key: 'stop',   label: 'Stop',  icon: '⏹️' },
+      { key:'auto',   label:'Auto',  icon:'🔁' },
+      { key:'forced', label:'Forcé', icon:'⚡' },
+      { key:'stop',   label:'Stop',  icon:'⏹️' },
     ];
 
     function getModeClass(key) {
@@ -960,187 +487,196 @@ createApp({
       return key === 'stop' ? 'active-stop' : 'active';
     }
 
-    /* ── ORP calculé ── */
     const orpZone = computed(() => {
       const v = parseFloat(sensors.orp);
-      return isNaN(v) ? { label: '—', cls: '' }
-        : ORP_ZONES.find(z => v <= z.max) || ORP_ZONES.at(-1);
+      return isNaN(v) ? { label:'—', cls:'' } : ORP_ZONES.find(z => v <= z.max) || ORP_ZONES.at(-1);
     });
-
     const orpCardClass = computed(() => {
       if (sensors.orpAlarm) return 'sensor-card bad';
-      if (orpZone.value.cls === 'state-warn') return 'sensor-card warn';
+      if (orpZone.value.cls === 'warn') return 'sensor-card warn';
       return 'sensor-card';
     });
-
     const orpBadgeCls = computed(() => {
-      if (sensors.orpAlarm || orpZone.value.cls === 'state-danger') return 'bad';
-      if (orpZone.value.cls === 'state-warn') return 'warn';
+      if (sensors.orpAlarm || orpZone.value.cls === 'bad') return 'bad';
+      if (orpZone.value.cls === 'warn') return 'warn';
       return 'ok';
     });
 
-
-    /* ── Fréquence ── */
     const freqSlider  = ref(40);
     const freqDisplay = ref('--');
-    const freqPct     = computed(() => ((freqSlider.value - 30) / 20 * 100).toFixed(1) + '%');
+    const freqPct     = computed(() => ((freqSlider.value-30)/20*100).toFixed(1)+'%');
     let freqDragging  = false;
+    function onFreqInput() { freqDragging=true; freqDisplay.value=Number(freqSlider.value).toFixed(1); }
+    function sendFreq() { mqttClient.publish(`${MQTT_PREFIX}/cmd/freq`, Number(freqSlider.value).toFixed(1)); setTimeout(()=>{freqDragging=false;},500); }
 
-    function onFreqInput() {
-      freqDragging = true;
-      freqDisplay.value = Number(freqSlider.value).toFixed(1);
-    }
-    function sendFreq() {
-      mqttClient.publish(`${MQTT_PREFIX}/cmd/freq`, Number(freqSlider.value).toFixed(1));
-      setTimeout(() => { freqDragging = false; }, 500);
-    }
-
-    /* ── Boutons d'action ── */
-    function makeBtn(label, sub) {
-      return reactive({ label, sub, cls: '', armed: false, timer: null, defaultLabel: label });
-    }
-    const btnPrimeState = makeBtn('Amorçage',   'Pompe doseuse pH-');
-    const btnCalState   = makeBtn('Étalonnage', 'pH milieu 7.0');
-
+    function makeBtn(label,sub) { return reactive({label,sub,cls:'',armed:false,timer:null,defaultLabel:label}); }
+    const btnPrimeState = makeBtn('Amorçage',  'Pompe doseuse pH-');
+    const btnCalState   = makeBtn('Étalonnage','pH milieu 7.0');
     const BTN_CFG = {
-      prime: { state: btnPrimeState, topic: `${MQTT_PREFIX}/cmd/prime`,         payload: 'ON' },
-      cal:   { state: btnCalState,   topic: `${MQTT_PREFIX}/cmd/calibrate_mid`, payload: 'ON' },
+      prime: { state:btnPrimeState, topic:`${MQTT_PREFIX}/cmd/prime`,         payload:'ON' },
+      cal:   { state:btnCalState,   topic:`${MQTT_PREFIX}/cmd/calibrate_mid`, payload:'ON' },
     };
-
     function handleAction(key) {
-      const { state, topic, payload } = BTN_CFG[key];
+      const {state,topic,payload} = BTN_CFG[key];
       if (!state.armed) {
-        state.armed = true; state.cls = 'confirm'; state.label = 'Confirmer ?';
-        state.timer = setTimeout(() => {
-          state.armed = false; state.cls = ''; state.label = state.defaultLabel;
-        }, 4000);
+        state.armed=true; state.cls='confirm'; state.label='Confirmer ?';
+        state.timer=setTimeout(()=>{state.armed=false;state.cls='';state.label=state.defaultLabel;},4000);
       } else {
         clearTimeout(state.timer);
-        mqttClient.publish(topic, payload);
-        state.armed = false; state.cls = 'busy'; state.label = 'Envoyé ✓';
-        setTimeout(() => { state.cls = ''; state.label = state.defaultLabel; }, 2500);
+        mqttClient.publish(topic,payload);
+        state.armed=false; state.cls='busy'; state.label='Envoyé ✓';
+        setTimeout(()=>{state.cls='';state.label=state.defaultLabel;},2500);
       }
     }
 
-    /* ── MQTT ── */
+    const MAX_POINTS = 60;
+    const history = reactive({ temp:[], ph:[], orp:[], labels:[] });
+    function pushHistory(temp,ph,orp) {
+      const t = new Date().toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+      const push = (a,v) => { a.push(v); if(a.length>MAX_POINTS) a.shift(); };
+      push(history.temp, parseFloat(temp)||null);
+      push(history.ph,   parseFloat(ph)||null);
+      push(history.orp,  parseFloat(orp)||null);
+      push(history.labels, t);
+      updateCharts();
+    }
+    const historyLabel = computed(() =>
+      `${history.labels.length} relevés · ${history.labels.at(0)||'--'} → ${history.labels.at(-1)||'--'}`);
+
+    const chartTemp=ref(null), chartPh=ref(null), chartOrp=ref(null);
+    let charts={};
+
+    const CHART_OPTS = {
+      type:'line',
+      options:{
+        responsive:true, maintainAspectRatio:false, animation:false,
+        plugins:{ legend:{display:false}, tooltip:{
+          backgroundColor:'rgba(255,255,255,.97)', titleColor:'#1e293b',
+          bodyColor:'#64748b', borderColor:'#e2e8f0', borderWidth:1, padding:8 }},
+        scales:{
+          x:{ display:false },
+          y:{ grid:{color:'#f1f5f9'}, ticks:{font:{size:10,family:'Nunito Sans'},color:'#94a3b8',maxTicksLimit:5}, border:{display:false} }
+        },
+        elements:{ point:{radius:0,hoverRadius:4}, line:{tension:.35,borderWidth:2.5} }
+      }
+    };
+
+    function mkDs(color,fill) { return { data:[], borderColor:color, backgroundColor:fill, fill:true }; }
+
+    function initCharts() {
+      charts.temp = new Chart(chartTemp.value, { ...CHART_OPTS, data:{ labels:history.labels, datasets:[mkDs('#f59e0b','rgba(245,158,11,.08)')] },
+        options:{...CHART_OPTS.options, scales:{...CHART_OPTS.options.scales, y:{...CHART_OPTS.options.scales.y, min:15, max:40, ticks:{...CHART_OPTS.options.scales.y.ticks, callback:v=>v+'°'}}}} });
+      charts.ph   = new Chart(chartPh.value,   { ...CHART_OPTS, data:{ labels:history.labels, datasets:[mkDs('#8b5cf6','rgba(139,92,246,.08)')] },
+        options:{...CHART_OPTS.options, scales:{...CHART_OPTS.options.scales, y:{...CHART_OPTS.options.scales.y, min:6.5, max:7.8, ticks:{...CHART_OPTS.options.scales.y.ticks, callback:v=>v.toFixed(1)}}}} });
+      charts.orp  = new Chart(chartOrp.value,  { ...CHART_OPTS, data:{ labels:history.labels, datasets:[mkDs('#0ea5e9','rgba(14,165,233,.08)')] },
+        options:{...CHART_OPTS.options, scales:{...CHART_OPTS.options.scales, y:{...CHART_OPTS.options.scales.y, min:400, max:900, ticks:{...CHART_OPTS.options.scales.y.ticks, callback:v=>v+' mV'}}}} });
+    }
+
+    function updateCharts() {
+      if (!charts.temp) return;
+      ['temp','ph','orp'].forEach(k => {
+        charts[k].data.labels = [...history.labels];
+        charts[k].data.datasets[0].data = [...history[k]];
+        charts[k].update('none');
+      });
+    }
+
+    watch(activeTab, async val => {
+      if (val==='charts') { await nextTick(); if (!charts.temp) initCharts(); else updateCharts(); }
+    });
+
+    function sendMode(mode) { mqttClient.publish(`${MQTT_PREFIX}/cmd/mode`, mode); }
+    function toggleElec() {
+      const newVal = !elecEnabled.value;
+      mqttClient.publish(`${MQTT_PREFIX}/cmd/electrolyzer`, newVal ? 'ON' : 'OFF');
+      elecEnabled.value = newVal;
+    }
+
     let mqttClient;
     const TOPICS = {
       sensors:     `${MQTT_PREFIX}/sensors`,
       drive:       `${MQTT_PREFIX}/drive`,
       electrolyzer:`${MQTT_PREFIX}/electrolyzer/state`,
+      elecEnabled: `${MQTT_PREFIX}/electrolyzer/enabled`,
       health:      `${MQTT_PREFIX}/health`,
       status:      `${MQTT_PREFIX}/status`,
     };
 
-    function sendMode(mode) { mqttClient.publish(`${MQTT_PREFIX}/cmd/mode`, mode); }
-
     function initMqtt() {
       mqttClient = mqtt.connect(MQTT_URL, {
-        username: MQTT_USER || undefined,
-        password: MQTT_PASS || undefined,
-        reconnectPeriod: 3000,
-      });
-
+        username: MQTT_USER||undefined, password: MQTT_PASS||undefined, reconnectPeriod:3000 });
       mqttClient.on('connect', () => {
-        connState.value = 'live';
-        Object.values(TOPICS).filter(t => t).forEach(t => mqttClient.subscribe(t));
+        connState.value='live';
+        Object.values(TOPICS).forEach(t => mqttClient.subscribe(t));
       });
-      mqttClient.on('reconnect', () => connState.value = '');
-      mqttClient.on('close',     () => connState.value = 'down');
-      mqttClient.on('error',     () => connState.value = 'down');
-
+      mqttClient.on('reconnect', () => connState.value='');
+      mqttClient.on('close',     () => connState.value='down');
+      mqttClient.on('error',     () => connState.value='down');
       mqttClient.on('message', (topic, buf) => {
         const raw = buf.toString();
         try {
-          switch (topic) {
+          switch(topic) {
             case TOPICS.sensors: {
               const d = JSON.parse(raw);
-              sensors.ph         = d.PhValue.toFixed(2);
-              sensors.orp        = Math.round(d.OrpMv).toString();
-              sensors.waterTemp  = d.WaterTempC.toFixed(1);
-              sensors.targetFreq = d.TargetFreqHz.toFixed(0);
-              sensors.phAlarmLow = !!d.PhAlarmLow;
-              sensors.orpAlarm   = !!d.OrpAlarm;
-              sensors.filterMode = (d.FilterMode || 'auto').toLowerCase();
-              if (!freqDragging) {
-                freqSlider.value  = d.PumpForcedFreqHz;
-                freqDisplay.value = Number(d.PumpForcedFreqHz).toFixed(1);
-              }
+              sensors.ph          = d.PhValue.toFixed(2);
+              sensors.orp         = Math.round(d.OrpMv).toString();
+              sensors.waterTemp   = d.WaterTempC.toFixed(1);
+              sensors.targetFreq  = d.TargetFreqHz.toFixed(0);
+              sensors.phAlarmLow  = !!d.PhAlarmLow;
+              sensors.orpAlarm    = !!d.OrpAlarm;
+              sensors.filterMode  = (d.FilterMode||'auto').toLowerCase();
+              if (!freqDragging) { freqSlider.value=d.PumpForcedFreqHz; freqDisplay.value=Number(d.PumpForcedFreqHz).toFixed(1); }
               pushHistory(d.WaterTempC.toFixed(1), d.PhValue.toFixed(2), Math.round(d.OrpMv));
               break;
             }
             case TOPICS.drive: {
               const d = JSON.parse(raw);
-              drive.freq      = d.OutFreqHz.toFixed(1);
-              drive.isRunning = !!d.IsRunning;
-              drive.isFault   = !!d.IsFault;
-              drive.faultCode = d.FaultCode;
-              drive.faultLabel= d.FaultLabel;
+              drive.freq=d.OutFreqHz.toFixed(1); drive.isRunning=!!d.IsRunning;
+              drive.isFault=!!d.IsFault; drive.faultCode=d.FaultCode; drive.faultLabel=d.FaultLabel;
               break;
             }
             case TOPICS.health: {
               const d = JSON.parse(raw);
-              healthItems[0].problem = !!d.I2cProblem;     healthItems[0].error = d.I2cLastError    || '';
-              healthItems[2].problem = !!d.Rs485Problem;   healthItems[2].error = d.Rs485LastError   || '';
+              healthItems[0].problem=!!d.I2cProblem;   healthItems[0].error=d.I2cLastError||'';
+              healthItems[1].problem=!!d.Rs485Problem; healthItems[1].error=d.Rs485LastError||'';
               break;
             }
-            case TOPICS.electrolyzer: elecOn.value = raw === 'ON'; break;
+            case TOPICS.electrolyzer: elecOn.value = raw==='ON'; break;
+            case TOPICS.elecEnabled: elecEnabled.value = raw==='ON'; break;
             case TOPICS.status:
-              if (raw === 'offline') connState.value = 'down';
+              if (raw==='offline') connState.value='down';
               break;
           }
-        } catch(e) { console.error('MQTT', topic, e); }
+        } catch(e) { console.error('MQTT',topic,e); }
       });
     }
 
     onMounted(() => {
       initMqtt();
-      const tick = () => clock.value = new Date().toLocaleTimeString('fr-FR',
-        { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-      tick(); setInterval(tick, 1000);
+      const tick = () => clock.value=new Date().toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+      tick(); setInterval(tick,1000);
 
-      // ── Veille écran ──────────────────────────────────────────────────────
-      // L'overlay noir couvre toute l'appli. Au premier toucher, il disparaît
-      // et le timer repart pour 60s. On écoute touchstart ET click pour
-      // couvrir à la fois l'usage tactile et la souris (tests sur PC).
       const TIMEOUT_MS = 60_000;
       let sleepTimer;
-
-      function goToSleep() {
-        sleeping.value = true;
-      }
-
       function wakeUp(e) {
-        if (sleeping.value) {
-          // Premier appui : réveille uniquement, n'envoie PAS le toucher
-          // aux éléments sous l'overlay (ex. évite un appui accidentel sur
-          // un bouton de mode au réveil).
-          e.preventDefault();
-          e.stopPropagation();
-          sleeping.value = false;
-        }
-        resetTimer();
-      }
-
-      function resetTimer() {
+        if (sleeping.value) { e.preventDefault(); e.stopPropagation(); sleeping.value=false; }
         clearTimeout(sleepTimer);
-        sleepTimer = setTimeout(goToSleep, TIMEOUT_MS);
+        sleepTimer = setTimeout(()=>{ sleeping.value=true; }, TIMEOUT_MS);
       }
-
-      document.addEventListener('touchstart', wakeUp, { capture: true });
-      document.addEventListener('click',      wakeUp, { capture: true });
-      resetTimer();
+      document.addEventListener('touchstart', wakeUp, { capture:true });
+      document.addEventListener('click',      wakeUp, { capture:true });
+      sleepTimer = setTimeout(()=>{ sleeping.value=true; }, TIMEOUT_MS);
     });
 
     return {
       connPill, clock, sleeping, activeTab,
-      chartTemp, chartPh, chartOrp, historyLabel,
-      sensors, drive, elecOn,
+      sensors, drive, elecOn, elecEnabled, toggleElec,
       orpZone, orpCardClass, orpBadgeCls,
       modes, getModeClass,
       freqSlider, freqDisplay, freqPct,
       btnPrimeState, btnCalState,
-      healthItems, healthDetail,
+      healthItems, healthDetail, hasEquipmentAlert,
+      chartTemp, chartPh, chartOrp, historyLabel,
       sendMode, sendFreq, onFreqInput, handleAction,
     };
   }
