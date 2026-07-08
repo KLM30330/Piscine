@@ -145,6 +145,35 @@ html, body {
   flex-shrink: 0;
 }
 
+
+/* ══ Bandeau alertes équipements ══════════════════════════════ */
+.alert-bar {
+  background: var(--red-lt);
+  border-bottom: 2px solid var(--red);
+  padding: 5px 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+.alert-item {
+  display: flex; align-items: center; gap: 6px;
+  background: white;
+  border: 1.5px solid var(--red);
+  border-radius: 8px;
+  padding: 4px 10px;
+  font-size: 11px; font-weight: 700;
+  color: var(--red);
+}
+.alert-item-icon { font-size: 13px; }
+.alert-item-text { display: flex; flex-direction: column; }
+.alert-item-bus  { font-size: 10px; font-weight: 800; }
+.alert-item-msg  { font-size: 9px; font-weight: 400; color: #b91c1c; max-width: 260px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.alert-bar-title { font-size: 10px; font-weight: 800; color: var(--red);
+  display: flex; align-items: center; gap: 5px; flex-shrink: 0; }
+
 /* ══════════════════════════════════════════════════════
    VEILLE ÉCRAN
 ══════════════════════════════════════════════════════ */
@@ -543,6 +572,19 @@ footer {
     ⚠️ Défaut variateur — {{ drive.faultLabel }} (code {{ drive.faultCode }})
   </div>
 
+
+  <!-- ALERTES ÉQUIPEMENTS -->
+  <div v-if="hasEquipmentAlert" class="alert-bar">
+    <div class="alert-bar-title">⚠ Équipement</div>
+    <div v-for="h in healthItems.filter(h => h.problem)" :key="h.id" class="alert-item">
+      <span class="alert-item-icon">{{ h.icon }}</span>
+      <span class="alert-item-text">
+        <span class="alert-item-bus">{{ h.label }} en défaut</span>
+        <span class="alert-item-msg">{{ h.error }}</span>
+      </span>
+    </div>
+  </div>
+
   <!-- ONGLETS -->
   <div class="tab-bar">
     <button class="tab-btn" :class="{ active: activeTab === 'dashboard' }"
@@ -754,11 +796,7 @@ footer {
 <script>
 const { createApp, ref, computed, reactive, onMounted, watch, nextTick } = Vue;
 
-<<<<<<< HEAD
 const MQTT_URL    = "ws://192.168.1.100:9001";
-=======
-const MQTT_URL    = "ws://192.168.1.100:1884";
->>>>>>> 098780feaa0c250295156f7349de7f541f2661b0
 const MQTT_USER   = "MQTT_Piscine";
 const MQTT_PASS   = "";
 const MQTT_PREFIX = "pool";
@@ -944,8 +982,8 @@ createApp({
     const elecOn       = ref(false);
     const healthDetail = ref('');
     const healthItems  = reactive([
-      { id: 'i2c',     label: 'I2C',      problem: false, error: '' },
-      { id: 'rs485',   label: 'RS485',    problem: false, error: '' },
+      { id: 'i2c',   label: 'I2C',   icon: '🔌', problem: false, error: '' },
+      { id: 'rs485', label: 'RS485', icon: '📡', problem: false, error: '' },
     ]);
 
     /* ── Modes ── */
@@ -959,6 +997,8 @@ createApp({
       if (sensors.filterMode !== key) return '';
       return key === 'stop' ? 'active-stop' : 'active';
     }
+
+    const hasEquipmentAlert = computed(() => healthItems.some(h => h.problem));
 
     /* ── ORP calculé ── */
     const orpZone = computed(() => {
@@ -1140,7 +1180,7 @@ createApp({
       modes, getModeClass,
       freqSlider, freqDisplay, freqPct,
       btnPrimeState, btnCalState,
-      healthItems, healthDetail,
+      healthItems, healthDetail, hasEquipmentAlert,
       sendMode, sendFreq, onFreqInput, handleAction,
     };
   }
