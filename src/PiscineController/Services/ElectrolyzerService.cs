@@ -117,6 +117,12 @@ public sealed class ElectrolyzerService : BackgroundService
 
         _relay.SetPin(0, !active);
         _state.ElectrolyzerRunning = active;
+
+        // Log Debug à chaque cycle pour faciliter le diagnostic — visible
+        // uniquement si le niveau minimum est baissé à Debug dans la config.
+        _logger.LogDebug(
+            "Électrolyseur Apply: active={A} enabled={E} pump={P} window={W} orpOk={O} orp={Orp:F0}",
+            active, _state.ElectrolyzerEnabled, _state.PumpRunning, inTimeWindow, orpOk, orp);
     }
 
     private async Task PublishStateAsync(CancellationToken ct)
