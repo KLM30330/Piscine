@@ -169,6 +169,33 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none;
 .action-btn.busy     { background: var(--green-lt); border-color: var(--green); }
 .action-btn.busy .a-label { color: #065f46; }
 
+
+/* ── Toggle électrolyseur ── */
+.elec-toggle {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-top: 8px; padding: 6px 8px;
+  background: var(--bg); border-radius: 8px;
+  border: 1.5px solid var(--border);
+}
+.elec-toggle-label { font-size: 11px; font-weight: 700; color: var(--text2); }
+.toggle-switch {
+  position: relative; width: 50px; height: 27px;
+  cursor: pointer; flex-shrink: 0;
+}
+.toggle-switch input { opacity: 0; width: 0; height: 0; position: absolute; }
+.toggle-track {
+  position: absolute; inset: 0; border-radius: 27px;
+  background: #e2e8f0; transition: background .25s;
+}
+.toggle-track.on { background: var(--green); }
+.toggle-thumb {
+  position: absolute; top: 3px; left: 3px;
+  width: 21px; height: 21px; border-radius: 50%;
+  background: white; transition: left .25s;
+  box-shadow: 0 1px 4px rgba(0,0,0,.2);
+}
+.toggle-thumb.on { left: 26px; }
+
 /* ── Vue graphiques ── */
 .charts-view { display: grid; grid-template-columns: repeat(3,1fr); gap: 10px;
   padding: 10px; flex: 1; overflow: hidden; }
@@ -308,10 +335,16 @@ footer { display: flex; align-items: center; gap: 0; padding: 4px 14px 5px;
           </span>
         </div>
         <div class="card-label">Électrolyseur</div>
-        <div style="font-size:20px;font-weight:800;letter-spacing:-.02em;color:var(--text);margin-top:5px">
+        <div style="font-size:17px;font-weight:800;letter-spacing:-.02em;color:var(--text);margin-top:3px">
           {{ elecOn ? 'En marche' : 'Arrêté' }}
         </div>
-        <div class="card-sub">Relais PCF8574</div>
+        <div class="elec-toggle" @click.stop="toggleElec">
+          <span class="elec-toggle-label">{{ elecEnabled ? 'Activé' : 'Désactivé' }}</span>
+          <div class="toggle-switch">
+            <div class="toggle-track" :class="{ on: elecEnabled }"></div>
+            <div class="toggle-thumb" :class="{ on: elecEnabled }"></div>
+          </div>
+        </div>
       </div>
 
     </div>
@@ -403,7 +436,7 @@ footer { display: flex; align-items: center; gap: 0; padding: 4px 14px 5px;
 <script>
 const { createApp, ref, computed, reactive, onMounted, watch, nextTick } = Vue;
 
-const MQTT_URL    = "ws://192.168.1.100:1884";
+const MQTT_URL    = "ws://192.168.1.100:9001";
 const MQTT_USER   = "MQTT_Piscine";
 const MQTT_PASS   = "";
 const MQTT_PREFIX = "pool";
@@ -434,7 +467,8 @@ createApp({
     const sensors = reactive({ ph:'--', orp:'--', waterTemp:'--', targetFreq:'--',
       filterMode:'--', phAlarmLow:false, orpAlarm:false });
     const drive = reactive({ freq:'--', isRunning:false, isFault:false, faultCode:0, faultLabel:'' });
-    const elecOn = ref(false);
+    const elecOn      = ref(false);
+    const elecEnabled = ref(true);  // consigne utilisateur
 
     const healthItems = reactive([
       { id:'i2c',   label:'I2C',   icon:'🔌', problem:false, error:'' },
@@ -552,12 +586,18 @@ createApp({
     });
 
     function sendMode(mode) { mqttClient.publish(`${MQTT_PREFIX}/cmd/mode`, mode); }
+    function toggleElec() {
+      const newVal = !elecEnabled.value;
+      mqttClient.publish(`${MQTT_PREFIX}/cmd/electrolyzer`, newVal ? 'ON' : 'OFF');
+      elecEnabled.value = newVal;
+    }
 
     let mqttClient;
     const TOPICS = {
       sensors:     `${MQTT_PREFIX}/sensors`,
       drive:       `${MQTT_PREFIX}/drive`,
       electrolyzer:`${MQTT_PREFIX}/electrolyzer/state`,
+      elecEnabled: `${MQTT_PREFIX}/electrolyzer/enabled`,
       health:      `${MQTT_PREFIX}/health`,
       status:      `${MQTT_PREFIX}/status`,
     };
@@ -602,6 +642,7 @@ createApp({
               break;
             }
             case TOPICS.electrolyzer: elecOn.value = raw==='ON'; break;
+            case TOPICS.elecEnabled: elecEnabled.value = raw==='ON'; break;
             case TOPICS.status:
               if (raw==='offline') connState.value='down';
               break;
@@ -629,7 +670,7 @@ createApp({
 
     return {
       connPill, clock, sleeping, activeTab,
-      sensors, drive, elecOn,
+      sensors, drive, elecOn, elecEnabled, toggleElec,
       orpZone, orpCardClass, orpBadgeCls,
       modes, getModeClass,
       freqSlider, freqDisplay, freqPct,
