@@ -253,6 +253,9 @@ main {
   gap: 6px;
   flex: 1.1;
 }
+.sensor-card:last-child {
+  grid-column: 2;
+}
 
 /* ── Panneau de commande ── */
 .col-control {
@@ -268,7 +271,7 @@ main {
   background: var(--card);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
-  padding: 8px 10px;
+  padding: 5px 8px;
   display: flex; flex-direction: column;
   position: relative;
   overflow: hidden;
@@ -288,11 +291,11 @@ main {
 
 .card-top {
   display: flex; align-items: center; justify-content: space-between;
-  margin-bottom: 3px;
+  margin-bottom: 2px;
 }
 
 .card-icon {
-  font-size: 16px; line-height: 1;
+  font-size: 14px; line-height: 1;
 }
 
 .card-badge {
@@ -318,7 +321,7 @@ main {
 }
 
 .card-value {
-  font-size: 26px; font-weight: 800;
+  font-size: 22px; font-weight: 800;
   color: var(--text);
   line-height: 1;
   letter-spacing: -.03em;
@@ -364,16 +367,17 @@ main {
   background: var(--bg);
   border: 2px solid var(--border);
   border-radius: 14px;
-  padding: 16px 6px 14px;
+  padding: 20px 8px 18px;
+  min-height: 80px;
   cursor: pointer;
   text-align: center;
   transition: all .18s;
   display: flex; flex-direction: column; align-items: center; gap: 6px;
   box-shadow: 0 1px 4px rgba(0,0,0,.06);
 }
-.mode-btn .m-icon  { font-size: 28px; line-height: 1; }
+.mode-btn .m-icon  { font-size: 32px; line-height: 1; }
 .mode-btn .m-label {
-  font-size: 15px; font-weight: 800;
+  font-size: 16px; font-weight: 800;
   color: var(--text2);
 }
 
@@ -443,14 +447,15 @@ input[type=range]::-webkit-slider-thumb {
   background: var(--card);
   border: 2px solid var(--border);
   border-radius: 14px;
-  padding: 16px 8px;
+  padding: 20px 8px;
+  min-height: 90px;
   cursor: pointer;
   text-align: center;
   transition: all .18s;
   box-shadow: 0 1px 4px rgba(0,0,0,.06);
 }
-.action-btn .a-icon  { font-size: 26px; display: block; margin-bottom: 6px; }
-.action-btn .a-label { font-size: 13px; font-weight: 800; color: var(--text); display: block; }
+.action-btn .a-icon  { font-size: 30px; display: block; margin-bottom: 8px; }
+.action-btn .a-label { font-size: 14px; font-weight: 800; color: var(--text); display: block; }
 .action-btn .a-sub   { font-size: 11px; color: var(--text3); font-family: var(--sans2); }
 
 .action-btn.confirm {
@@ -619,21 +624,6 @@ footer {
         <div class="card-sub">Mode : {{ sensors.filterMode }}</div>
       </div>
 
-      <!-- Température pompe -->
-      <div class="sensor-card" :class="pumpTempCardClass"
-        style="--card-accent: #10b981">
-        <div class="card-top">
-          <span class="card-icon">🌡️</span>
-          <span class="card-badge" :class="pumpTempBadgeCls">Pompe</span>
-        </div>
-        <div class="card-label">Température pompe</div>
-        <div class="card-value-row">
-          <span class="card-value">{{ pumpTemp }}</span>
-          <span class="card-unit">°C</span>
-        </div>
-        <div class="card-sub">Alerte &gt; 60°C · Critique &gt; 70°C</div>
-      </div>
-
       <!-- Électrolyseur -->
       <div class="sensor-card" style="--card-accent: #10b981">
         <div class="card-top">
@@ -764,7 +754,7 @@ footer {
 <script>
 const { createApp, ref, computed, reactive, onMounted, watch, nextTick } = Vue;
 
-const MQTT_URL    = "ws://192.168.1.103:9001";
+const MQTT_URL    = "ws://192.168.1.100:9001";
 const MQTT_USER   = "MQTT_Piscine";
 const MQTT_PASS   = "";
 const MQTT_PREFIX = "pool";
@@ -947,12 +937,10 @@ createApp({
       freq: '--', isRunning: false,
       isFault: false, faultCode: 0, faultLabel: '',
     });
-    const pumpTemp     = ref('--');
     const elecOn       = ref(false);
     const healthDetail = ref('');
     const healthItems  = reactive([
       { id: 'i2c',     label: 'I2C',      problem: false, error: '' },
-      { id: 'onewire', label: 'One-wire', problem: false, error: '' },
       { id: 'rs485',   label: 'RS485',    problem: false, error: '' },
     ]);
 
@@ -987,20 +975,6 @@ createApp({
       return 'ok';
     });
 
-    /* ── Température pompe ── */
-    const pumpTempCardClass = computed(() => {
-      const t = parseFloat(pumpTemp.value);
-      if (t >= 70) return 'sensor-card bad';
-      if (t >= 60) return 'sensor-card warn';
-      return 'sensor-card';
-    });
-
-    const pumpTempBadgeCls = computed(() => {
-      const t = parseFloat(pumpTemp.value);
-      if (t >= 70) return 'bad';
-      if (t >= 60) return 'warn';
-      return 'ok';
-    });
 
     /* ── Fréquence ── */
     const freqSlider  = ref(40);
@@ -1050,7 +1024,6 @@ createApp({
       sensors:     `${MQTT_PREFIX}/sensors`,
       drive:       `${MQTT_PREFIX}/drive`,
       electrolyzer:`${MQTT_PREFIX}/electrolyzer/state`,
-      pumpTemp:    `${MQTT_PREFIX}/pump_temp`,
       health:      `${MQTT_PREFIX}/health`,
       status:      `${MQTT_PREFIX}/status`,
     };
@@ -1066,7 +1039,7 @@ createApp({
 
       mqttClient.on('connect', () => {
         connState.value = 'live';
-        Object.values(TOPICS).forEach(t => mqttClient.subscribe(t));
+        Object.values(TOPICS).filter(t => t).forEach(t => mqttClient.subscribe(t));
       });
       mqttClient.on('reconnect', () => connState.value = '');
       mqttClient.on('close',     () => connState.value = 'down');
@@ -1104,14 +1077,10 @@ createApp({
             case TOPICS.health: {
               const d = JSON.parse(raw);
               healthItems[0].problem = !!d.I2cProblem;     healthItems[0].error = d.I2cLastError    || '';
-              healthItems[1].problem = !!d.OneWireProblem; healthItems[1].error = d.OneWireLastError || '';
               healthItems[2].problem = !!d.Rs485Problem;   healthItems[2].error = d.Rs485LastError   || '';
               break;
             }
             case TOPICS.electrolyzer: elecOn.value = raw === 'ON'; break;
-            case TOPICS.pumpTemp:
-              pumpTemp.value = isNaN(parseFloat(raw)) ? '--' : parseFloat(raw).toFixed(1);
-              break;
             case TOPICS.status:
               if (raw === 'offline') connState.value = 'down';
               break;
@@ -1162,9 +1131,8 @@ createApp({
     return {
       connPill, clock, sleeping, activeTab,
       chartTemp, chartPh, chartOrp, historyLabel,
-      sensors, drive, pumpTemp, elecOn,
+      sensors, drive, elecOn,
       orpZone, orpCardClass, orpBadgeCls,
-      pumpTempCardClass, pumpTempBadgeCls,
       modes, getModeClass,
       freqSlider, freqDisplay, freqPct,
       btnPrimeState, btnCalState,

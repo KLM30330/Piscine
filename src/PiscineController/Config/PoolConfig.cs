@@ -29,6 +29,15 @@ public sealed class PoolConfig
     // Ex. : 8h00–22h00 → ElectrolyzerStartH=8, ElectrolyzerStopH=22.
     public int ElectrolyzerStartH { get; set; } = 8;
     public int ElectrolyzerStopH  { get; set; } = 22;
+    // Seuil ORP au-delà duquel l'électrolyseur se coupe automatiquement
+    // pour éviter le surdosage. Correspond à la zone "Limite haute" définie
+    // dans FiltrationManager (OrpTargetHigh = 750 mV par défaut).
+    public double ElectrolyzerOrpMax { get; set; } = 750.0;
+    // Hystérésis ORP : l'électrolyseur se coupe à OrpMax et ne se réactive
+    // qu'une fois l'ORP redescendu sous (OrpMax - OrpHysteresis).
+    // Ex. avec OrpMax=750 et Hysteresis=30 : coupe à 750, réactivation à 720.
+    // Évite les cycles rapides relais (claquement) si l'ORP oscille au seuil.
+    public double ElectrolyzerOrpHysteresis { get; set; } = 30.0;
 
     // 1-Wire DS18B20
 

@@ -17,9 +17,10 @@ public sealed class PoolState
     // publication MQTT immédiate sans attendre le prochain cycle.
     public event Action<FilterMode>? FilterModeChanged;
     public event Action<bool>?       ElectrolyzerEnabledChanged;
-    // Permet à ElectrolyzerService de couper le relais immédiatement
-    // quand la pompe s'arrête, sans attendre son cycle de 5s.
     public event Action<bool>?       PumpRunningChanged;
+    // Permet à ElectrolyzerService de réagir immédiatement à un ORP qui
+    // dépasse le seuil, sans attendre son prochain cycle de 5s.
+    public event Action<double>?     OrpMvChanged;
 
     public double WaterTempC
     {
@@ -34,7 +35,14 @@ public sealed class PoolState
     public double OrpMv
     {
         get => Volatile.Read(ref _orpMv);
-        set => Volatile.Write(ref _orpMv, value);
+        set
+        {
+            double old = Volatile.Read(ref _orpMv);
+            Volatile.Write(ref _orpMv, value);
+            // Notifie uniquement si la variation dépasse 5 mV pour éviter
+            // de déclencher Apply() à chaque micro-fluctuation du capteur.
+            if (Math.Abs(value - old) >= 5.0) OrpMvChanged?.Invoke(value);
+        }
     }
     public double PumpFreqHz
     {

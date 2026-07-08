@@ -15,6 +15,10 @@ public sealed class ElectrolyzerService : BackgroundService
     private readonly ILogger<ElectrolyzerService> _logger;
     private bool? _lastActive;
     private bool? _lastEnabled;
+    // Mémoire d'état ORP : true = électrolyseur bloqué par ORP élevé.
+    // Reste true jusqu'à ce que l'ORP repasse sous (OrpMax - Hysteresis),
+    // évitant ainsi les cycles rapides si l'ORP oscille au seuil.
+    private bool _orpBlocked;
 
     public ElectrolyzerService(PoolState state, Pcf8574 relay,
         MqttService mqtt, PoolConfig cfg,
@@ -25,6 +29,9 @@ public sealed class ElectrolyzerService : BackgroundService
 
         _state.ElectrolyzerEnabledChanged += enabled => { _ = ApplyAndPublishNowAsync(); };
         _state.PumpRunningChanged         += running => { _ = ApplyAndPublishNowAsync(); };
+        // Réévaluation immédiate à chaque variation ORP significative (≥5 mV)
+        // pour couper/réactiver l'électrolyseur sans attendre le cycle de 5s.
+        _state.OrpMvChanged               += orp    => { _ = ApplyAndPublishNowAsync(); };
     }
 
     private async Task ApplyAndPublishNowAsync()
@@ -69,22 +76,45 @@ public sealed class ElectrolyzerService : BackgroundService
 
     private void Apply()
     {
-        // Verrou de sécurité 1 : pompe doit tourner
-        // Verrou de sécurité 2 : plage horaire autorisée
         int h = DateTime.Now.Hour;
         bool inTimeWindow = h >= _cfg.ElectrolyzerStartH && h < _cfg.ElectrolyzerStopH;
 
-        if (!inTimeWindow && _state.ElectrolyzerRunning)
-            _logger.LogInformation(
-                "Électrolyseur coupé (hors plage {Start}h–{Stop}h)",
-                _cfg.ElectrolyzerStartH, _cfg.ElectrolyzerStopH);
+        // ── Hystérésis ORP ────────────────────────────────────────────────────
+        // Coupe à OrpMax, ne réactive qu'à (OrpMax - Hysteresis).
+        // _orpBlocked persiste entre les appels pour mémoriser l'état.
+        double orp = _state.OrpMv;
+        if (!_orpBlocked && orp >= _cfg.ElectrolyzerOrpMax)
+            _orpBlocked = true;
+        else if (_orpBlocked && orp < _cfg.ElectrolyzerOrpMax - _cfg.ElectrolyzerOrpHysteresis)
+            _orpBlocked = false;
 
-        bool active = _state.ElectrolyzerEnabled && _state.PumpRunning && inTimeWindow;
+        bool orpOk = !_orpBlocked;
 
-        // Pcf8574 : relais actif-bas (cf. constructeur, état par défaut 0xFF =
-        // "relais désactivés"). Pour ACTIVER le relais il faut donc mettre la
-        // broche à LOW (false), et à HIGH (true) pour le désactiver — c'est
-        // l'inverse de "active".
+        bool active = _state.ElectrolyzerEnabled
+                   && _state.PumpRunning
+                   && inTimeWindow
+                   && orpOk;
+
+        if (active != _state.ElectrolyzerRunning)
+        {
+            if (!active)
+            {
+                string reason =
+                    !_state.PumpRunning         ? "pompe arrêtée" :
+                    !_state.ElectrolyzerEnabled ? "désactivé manuellement" :
+                    !inTimeWindow               ? $"hors plage {_cfg.ElectrolyzerStartH}h–{_cfg.ElectrolyzerStopH}h" :
+                    _orpBlocked                 ? $"ORP élevé ({orp:F0} mV ≥ {_cfg.ElectrolyzerOrpMax} mV, réactivation < {_cfg.ElectrolyzerOrpMax - _cfg.ElectrolyzerOrpHysteresis} mV)" :
+                                                  "inconnu";
+                _logger.LogInformation("Électrolyseur OFF — {Reason}", reason);
+            }
+            else
+            {
+                _logger.LogInformation(
+                    "Électrolyseur ON (ORP={Orp:F0} mV, pompe={Pump}, plage={Ok})",
+                    orp, _state.PumpRunning, inTimeWindow);
+            }
+        }
+
         _relay.SetPin(0, !active);
         _state.ElectrolyzerRunning = active;
     }
