@@ -130,6 +130,9 @@ public sealed class MqttService : BackgroundService
 
                 _logger.LogInformation("MQTT connecté à {Broker}", _cfg.MqttBroker);
                 await PublishAsync($"{_cfg.MqttPrefix}/status", "online", retain: true, ct: ct);
+                // Publier les valeurs de config actuelles pour que HA affiche
+                // les bonnes valeurs dans les entités number dès la connexion.
+                await PublishConfigAsync(ct);
                 return;
             }
             catch (Exception ex) when (!ct.IsCancellationRequested)
@@ -209,7 +212,16 @@ public sealed class MqttService : BackgroundService
                 case "logs":
                     if (payload != "0") await PublishLogsAsync(payload);
                     break;
-            }
+
+                // ── Paramètres configurables depuis HA ───────────────────────
+                // Le topic est cmd/config/xxx — on extrait la clé après "config/"
+                default:
+                    if (cmd.StartsWith("config/"))
+                    {
+                        string key = cmd["config/".Length..];
+                        await HandleConfigCommandAsync(key, payload);
+                    }
+                    break;
         }
         catch (Exception ex) { _logger.LogError(ex, "Erreur traitement commande {Cmd}", cmd); }
     }
@@ -222,6 +234,114 @@ public sealed class MqttService : BackgroundService
     // nombre de lignes demandées en texte (ex. "200"), défaut 100 si vide
     // ou invalide. Un message {prefix}/logs/meta précède l'envoi avec le
     // nombre total de morceaux, pour que l'abonné sache combien attendre.
+    // Publie les valeurs actuelles de configuration sur les topics retained
+    // pour que HA affiche les valeurs courantes dans les entités number.
+    public async Task PublishConfigAsync(CancellationToken ct = default)
+    {
+        var values = new Dictionary<string, double>
+        {
+            ["freq_min_filtration"]        = _cfg.FreqMinFiltration,
+            ["freq_min_absolute"]          = _cfg.FreqMinAbsolute,
+            ["electrolyzer_start_h"]       = _cfg.ElectrolyzerStartH,
+            ["electrolyzer_stop_h"]        = _cfg.ElectrolyzerStopH,
+            ["electrolyzer_orp_max"]       = _cfg.ElectrolyzerOrpMax,
+            ["electrolyzer_orp_hysteresis"]= _cfg.ElectrolyzerOrpHysteresis,
+        };
+        foreach (var (key, val) in values)
+            await PublishAsync(
+                $"{_cfg.MqttPrefix}/config/{key}",
+                $"{{\"value\":{val.ToString("G", System.Globalization.CultureInfo.InvariantCulture)}}}",
+                retain: true, ct: ct);
+    }
+
+    // Traite une commande de modification de configuration reçue depuis HA.
+    // Met à jour PoolConfig en mémoire (effet immédiat) et persiste dans
+    // appsettings.json pour survivre à un redémarrage du service.
+    private async Task HandleConfigCommandAsync(string key, string payload)
+    {
+        if (!double.TryParse(payload, System.Globalization.CultureInfo.InvariantCulture, out double val))
+        {
+            _logger.LogWarning("Config: valeur invalide pour {Key}: {Payload}", key, payload);
+            return;
+        }
+
+        bool changed = true;
+        switch (key)
+        {
+            case "freq_min_filtration":
+                _cfg.FreqMinFiltration = Math.Clamp(val, 20, 50);
+                _logger.LogInformation("Config: FreqMinFiltration → {Val} Hz", _cfg.FreqMinFiltration);
+                break;
+            case "freq_min_absolute":
+                _cfg.FreqMinAbsolute = Math.Clamp(val, 20, 50);
+                _logger.LogInformation("Config: FreqMinAbsolute → {Val} Hz", _cfg.FreqMinAbsolute);
+                break;
+            case "electrolyzer_start_h":
+                _cfg.ElectrolyzerStartH = (int)Math.Clamp(val, 0, 23);
+                _logger.LogInformation("Config: ElectrolyzerStartH → {Val}h", _cfg.ElectrolyzerStartH);
+                break;
+            case "electrolyzer_stop_h":
+                _cfg.ElectrolyzerStopH = (int)Math.Clamp(val, 0, 24);
+                _logger.LogInformation("Config: ElectrolyzerStopH → {Val}h", _cfg.ElectrolyzerStopH);
+                break;
+            case "electrolyzer_orp_max":
+                _cfg.ElectrolyzerOrpMax = Math.Clamp(val, 500, 900);
+                _logger.LogInformation("Config: ElectrolyzerOrpMax → {Val} mV", _cfg.ElectrolyzerOrpMax);
+                break;
+            case "electrolyzer_orp_hysteresis":
+                _cfg.ElectrolyzerOrpHysteresis = Math.Clamp(val, 5, 100);
+                _logger.LogInformation("Config: ElectrolyzerOrpHysteresis → {Val} mV", _cfg.ElectrolyzerOrpHysteresis);
+                break;
+            default:
+                changed = false;
+                _logger.LogWarning("Config: clé inconnue {Key}", key);
+                break;
+        }
+
+        if (changed)
+        {
+            await PublishConfigAsync();
+            PersistConfig();
+        }
+    }
+
+    // Persiste les valeurs modifiées dans appsettings.json via sed pour éviter
+    // toute dépendance à un sérialiseur JSON en écriture (non nécessaire en AOT).
+    private void PersistConfig()
+    {
+        try
+        {
+            string path = Path.Combine(AppContext.BaseDirectory, "appsettings.json");
+            if (!File.Exists(path)) return;
+
+            var subs = new Dictionary<string, string>
+            {
+                [$"\"FreqMinFiltration\""]        = $"\"FreqMinFiltration\": {_cfg.FreqMinFiltration.ToString("G", System.Globalization.CultureInfo.InvariantCulture)}",
+                [$"\"FreqMinAbsolute\""]           = $"\"FreqMinAbsolute\": {_cfg.FreqMinAbsolute.ToString("G", System.Globalization.CultureInfo.InvariantCulture)}",
+                [$"\"ElectrolyzerStartH\""]        = $"\"ElectrolyzerStartH\": {_cfg.ElectrolyzerStartH}",
+                [$"\"ElectrolyzerStopH\""]         = $"\"ElectrolyzerStopH\": {_cfg.ElectrolyzerStopH}",
+                [$"\"ElectrolyzerOrpMax\""]        = $"\"ElectrolyzerOrpMax\": {_cfg.ElectrolyzerOrpMax.ToString("G", System.Globalization.CultureInfo.InvariantCulture)}",
+                [$"\"ElectrolyzerOrpHysteresis\""] = $"\"ElectrolyzerOrpHysteresis\": {_cfg.ElectrolyzerOrpHysteresis.ToString("G", System.Globalization.CultureInfo.InvariantCulture)}",
+            };
+
+            string content = File.ReadAllText(path);
+            foreach (var (key, replacement) in subs)
+            {
+                // Remplace la clé et sa valeur (nombre ou entier) jusqu'à la virgule ou fin de ligne
+                content = System.Text.RegularExpressions.Regex.Replace(
+                    content,
+                    $"{System.Text.RegularExpressions.Regex.Escape(key)}:\\s*[0-9.]+",
+                    replacement);
+            }
+            File.WriteAllText(path, content);
+            _logger.LogDebug("appsettings.json mis à jour");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Impossible de persister la configuration dans appsettings.json");
+        }
+    }
+
     private const int LogLinesPerChunk = 30;
 
     private async Task PublishLogsAsync(string payload)
@@ -462,6 +582,29 @@ public sealed class MqttService : BackgroundService
             "remaining_h", "h", "duration", "filtration/elapsed");
         await BinarySensor("filtration_pump_on", "Pompe en filtration",
             "pump_on", "running", "filtration/elapsed");
+
+        // ── Paramètres configurables depuis HA ───────────────────────────────
+        // Ces entités "number" permettent de modifier les seuils directement
+        // depuis HA sans éditer appsettings.json. Les valeurs sont persistées
+        // dans appsettings.json à chaque modification.
+        await Number("cfg_freq_min_filtration", "Fréquence min filtration",
+            "config/freq_min_filtration", "value",
+            25, 50, 0.5, "Hz", "config/freq_min_filtration");
+        await Number("cfg_freq_min_absolute", "Fréquence min absolue",
+            "config/freq_min_absolute", "value",
+            20, 50, 0.5, "Hz", "config/freq_min_absolute");
+        await Number("cfg_electrolyzer_start_h", "Électrolyseur — heure début",
+            "config/electrolyzer_start_h", "value",
+            0, 23, 1, "h", "config/electrolyzer_start_h");
+        await Number("cfg_electrolyzer_stop_h", "Électrolyseur — heure fin",
+            "config/electrolyzer_stop_h", "value",
+            0, 24, 1, "h", "config/electrolyzer_stop_h");
+        await Number("cfg_electrolyzer_orp_max", "Électrolyseur — seuil ORP coupure",
+            "config/electrolyzer_orp_max", "value",
+            600, 900, 5, "mV", "config/electrolyzer_orp_max");
+        await Number("cfg_electrolyzer_orp_hysteresis", "Électrolyseur — hystérésis ORP",
+            "config/electrolyzer_orp_hysteresis", "value",
+            5, 100, 5, "mV", "config/electrolyzer_orp_hysteresis");
     }
 
     public override async Task StopAsync(CancellationToken ct)
