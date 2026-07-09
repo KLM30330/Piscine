@@ -222,6 +222,7 @@ public sealed class MqttService : BackgroundService
                         await HandleConfigCommandAsync(key, payload);
                     }
                     break;
+            }
         }
         catch (Exception ex) { _logger.LogError(ex, "Erreur traitement commande {Cmd}", cmd); }
     }
