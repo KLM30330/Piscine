@@ -110,6 +110,12 @@ public sealed class FiltrationManager
     public void SetTargetFreq(double hz)
     { lock (_lock) _targetFreqHz = Math.Max(hz, _cfg.FreqMinAbsolute); }
 
+    // Met à jour la fréquence forcée sans changer le mode actuel.
+    // Permet au panneau de mémoriser une consigne fréquence en mode Auto,
+    // qui sera appliquée dès le passage en mode Forcé.
+    public void SetForcedFreq(double hz)
+    { lock (_lock) _forcedFreqHz = Math.Clamp(hz, _cfg.FreqMinAbsolute, _cfg.FreqNominal); }
+
     public void SetMode(string modeStr, double? freqHz = null)
     {
         lock (_lock)
