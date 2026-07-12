@@ -184,13 +184,6 @@ public sealed class MqttService : BackgroundService
                     if (double.TryParse(payload, System.Globalization.CultureInfo.InvariantCulture, out double hz))
                         _filtration.SetMode("forced", hz);
                     break;
-                // Met à jour uniquement la fréquence forcée sans changer le mode.
-                // Utilisé par le panneau tactile quand on ajuste le curseur en mode Auto —
-                // la valeur sera appliquée dès que l'on bascule en mode Forcé.
-                case "freq_set":
-                    if (double.TryParse(payload, System.Globalization.CultureInfo.InvariantCulture, out double hzSet))
-                        _filtration.SetForcedFreq(hzSet);
-                    break;
                 case "reset_ph":
                     _pid.Reset();
                     break;
