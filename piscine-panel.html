@@ -63,17 +63,61 @@ header { display: flex; align-items: center; justify-content: space-between;
 .fault-bar { background: var(--red); color: white; font-size: 12px; font-weight: 700;
   padding: 5px 18px; text-align: center; flex-shrink: 0; animation: faultBlink 1.5s ease-in-out infinite; }
 @keyframes faultBlink { 0%,100%{opacity:1}50%{opacity:.7} }
-@keyframes alertBlink { 0%,100%{background:var(--red-lt)}50%{background:var(--red);color:white} }
+@keyframes alertBlink {
+  0%,100% { background: var(--red-lt); border-color: var(--red); }
+  50%      { background: var(--red);    border-color: #b91c1c; }
+}
+@keyframes alertTextBlink {
+  0%,100% { color: var(--red); }
+  50%      { color: white; }
+}
 
-.alert-bar { background: var(--red-lt); border-bottom: 2px solid var(--red);
+.alert-bar {
+  background: var(--green-lt);
+  border-bottom: 3px solid var(--green);
+  padding: 6px 14px;
+  display: flex; align-items: center; gap: 10px;
+  flex-shrink: 0; flex-wrap: wrap;
+  min-height: 38px;
+  transition: background .3s, border-color .3s;
+}
+.alert-bar.blinking {
+  background: var(--red-lt);
+  border-bottom-color: var(--red);
   animation: alertBlink 1s ease-in-out infinite;
-  padding: 5px 14px; display: flex; align-items: center; gap: 8px; flex-shrink: 0; flex-wrap: wrap; }
-.alert-bar-title { font-size: 10px; font-weight: 800; color: var(--red); flex-shrink: 0; }
-.alert-item { display: flex; align-items: center; gap: 6px; background: white;
-  border: 1.5px solid var(--red); border-radius: 8px; padding: 4px 10px; }
-.alert-item-bus  { font-size: 10px; font-weight: 800; color: var(--red); }
-.alert-item-msg  { font-size: 9px; color: #b91c1c; max-width: 250px;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: var(--sans2); }
+}
+.alert-bar-title {
+  font-size: 11px; font-weight: 800;
+  color: var(--green);
+  flex-shrink: 0;
+  display: flex; align-items: center; gap: 5px;
+}
+.alert-bar.blinking .alert-bar-title {
+  color: var(--red);
+  animation: alertTextBlink 1s ease-in-out infinite;
+}
+.alert-chip.ok {
+  display: inline-flex; align-items: center; gap: 5px;
+  background: white; border: 1.5px solid var(--green);
+  border-radius: 20px; padding: 2px 10px;
+  font-size: 10px; font-weight: 700; color: #065f46;
+}
+.alert-item {
+  display: flex; align-items: flex-start; gap: 8px;
+  background: white;
+  border: 1.5px solid var(--red);
+  border-radius: 8px;
+  padding: 4px 10px;
+  flex: 1; min-width: 200px; max-width: 420px;
+}
+.alert-item-icon { font-size: 16px; flex-shrink: 0; margin-top: 1px; }
+.alert-item-content { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.alert-item-bus { font-size: 11px; font-weight: 800; color: var(--red); }
+.alert-item-msg {
+  font-size: 10px; color: #b91c1c;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  font-family: var(--sans2); max-width: 380px;
+}
 
 /* ── Onglets ── */
 .tab-bar { display: flex; background: white; border-bottom: 1px solid var(--border);
@@ -88,14 +132,17 @@ main { display: flex; flex: 1; padding: 8px 10px; gap: 8px; overflow: hidden; }
 
 /* ── Grille capteurs ── */
 .col-sensors { display: grid; grid-template-columns: repeat(3,1fr);
-  grid-template-rows: repeat(2,1fr); gap: 6px; flex: 1.1; }
+  grid-template-rows: repeat(2,170px); gap: 15px; flex: 1.1;
+  align-content: start; }
 
 /* ── Colonne contrôles ── */
-.col-control { display: flex; flex-direction: column; gap: 7px; flex: 1.4; }
+.col-control { display: flex; flex-direction: column; gap: 15px; flex: 1.4;
+  align-self: start; }
 
 /* ── Cartes capteurs ── */
 .sensor-card { background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow);
-  padding: 6px 9px; display: flex; flex-direction: column; position: relative; overflow: hidden; }
+  padding: 8px 11px; display: flex; flex-direction: column; position: relative; overflow: hidden;
+  height: 170px; }
 .sensor-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
   background: var(--card-accent, var(--blue)); border-radius: var(--radius) var(--radius) 0 0; }
 .sensor-card.warn  { --card-accent: var(--amber); background: var(--amber-lt); }
@@ -103,7 +150,7 @@ main { display: flex; flex: 1; padding: 8px 10px; gap: 8px; overflow: hidden; }
 .sensor-card:last-child { grid-column: 2; }
 
 .card-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 2px; }
-.card-icon { font-size: 13px; }
+.card-icon { font-size: 15px; }
 .card-badge { font-size: 8px; font-weight: 700; padding: 1px 5px; border-radius: 20px; }
 .card-badge.ok   { background: var(--green-lt); color: #065f46; }
 .card-badge.warn { background: var(--amber-lt); color: #92400e; }
@@ -111,7 +158,7 @@ main { display: flex; flex: 1; padding: 8px 10px; gap: 8px; overflow: hidden; }
 .card-badge.off  { background: #f1f5f9;          color: var(--text3); }
 .card-label { font-size: 8px; font-weight: 700; color: var(--text2);
   letter-spacing: .04em; text-transform: uppercase; }
-.card-value { font-size: 23px; font-weight: 800; color: var(--text);
+.card-value { font-size: 28px; font-weight: 800; color: var(--text);
   line-height: 1; letter-spacing: -.03em; }
 .sensor-card.warn .card-value { color: #92400e; }
 .sensor-card.bad  .card-value { color: var(--red); }
@@ -120,17 +167,18 @@ main { display: flex; flex: 1; padding: 8px 10px; gap: 8px; overflow: hidden; }
 
 /* ── Cartes contrôle ── */
 .ctrl-card { background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow); padding: 10px 13px; }
-.freq-card.ctrl-card { padding: 5px 10px; }
+.ctrl-card.mode-card { height: 170px; }
+.freq-card.ctrl-card { padding: 5px 10px; height: 170px; }
 .section-title { font-size: 9px; font-weight: 800; letter-spacing: .08em;
   text-transform: uppercase; color: var(--text3); margin-bottom: 4px; }
 
 /* ── Switches de mode ── */
 .mode-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 6px; }
 .mode-btn { background: var(--bg); border: 2px solid var(--border); border-radius: var(--radius-sm);
-  padding: 13px 6px 11px; cursor: pointer; text-align: center;
-  display: flex; flex-direction: column; align-items: center; gap: 4px;
-  min-height: 72px; transition: all .18s; box-shadow: 0 1px 3px rgba(0,0,0,.05); }
-.mode-btn .m-icon  { font-size: 26px; line-height: 1; }
+  padding: 6px; cursor: pointer; text-align: center;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+  height: 130px; transition: all .18s; box-shadow: 0 1px 3px rgba(0,0,0,.05); }
+.mode-btn .m-icon  { font-size: 36px; line-height: 1; }
 .mode-btn .m-label { font-size: 13px; font-weight: 800; color: var(--text2); }
 .mode-btn.active   { background: var(--blue-lt); border-color: var(--blue);
   box-shadow: 0 0 0 3px rgba(59,130,246,.1); }
@@ -140,7 +188,7 @@ main { display: flex; flex: 1; padding: 8px 10px; gap: 8px; overflow: hidden; }
 .mode-btn.active-stop .m-label { color: var(--red); }
 
 /* ── Curseur fréquence ── */
-.freq-card { flex: 1; display: flex; flex-direction: column; justify-content: center; }
+.freq-card { display: flex; flex-direction: column; justify-content: center; height: 170px; }
 .freq-header { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 2px; }
 .freq-value { font-size: 20px; font-weight: 800; color: var(--text); letter-spacing: -.02em; }
 .freq-value .fu { font-size: 13px; color: var(--text3); font-weight: 600; }
@@ -159,7 +207,7 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none;
 .actions { display: flex; gap: 7px; }
 .action-btn { flex: 1; background: var(--card); border: 2px solid var(--border);
   border-radius: var(--radius-sm); padding: 14px 8px; cursor: pointer; text-align: center;
-  min-height: 82px; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  height: 82px; display: flex; flex-direction: column; align-items: center; justify-content: center;
   gap: 4px; transition: all .18s; box-shadow: 0 1px 4px rgba(0,0,0,.05); }
 .action-btn .a-icon  { font-size: 24px; }
 .action-btn .a-label { font-size: 12px; font-weight: 800; color: var(--text); }
@@ -225,6 +273,22 @@ footer { display: flex; align-items: center; gap: 0; padding: 4px 14px 5px;
   max-width: 380px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
   font-family: var(--sans2); }
 
+.maint-card {
+  height: 220px;
+  display: grid;
+  grid-template-rows: auto auto auto 1fr;
+  align-items: center;
+  justify-items: center;
+  text-align: center;
+  gap: 6px;
+  padding: 14px 12px 12px;
+}
+.maint-card .action-btn {
+  width: 100%;
+  align-self: end;
+  height: auto;
+  min-height: 48px;
+}
 /* ── Veille ── */
 .sleep-overlay { position: fixed; inset: 0; z-index: 9999; background: #000;
   display: flex; align-items: center; justify-content: center; cursor: pointer; }
@@ -259,15 +323,25 @@ footer { display: flex; align-items: center; gap: 0; padding: 4px 14px 5px;
     ⚠️ Défaut variateur — {{ drive.faultLabel }} (code {{ drive.faultCode }})
   </div>
 
-  <div v-if="hasEquipmentAlert" class="alert-bar">
-    <div class="alert-bar-title">⚠ Équipement</div>
-    <div v-for="h in healthItems.filter(h => h.problem)" :key="h.id" class="alert-item">
-      <span>{{ h.icon }}</span>
-      <div>
-        <div class="alert-item-bus">{{ h.label }} en défaut</div>
-        <div class="alert-item-msg">{{ h.error }}</div>
+  <div class="alert-bar" :class="{ blinking: hasEquipmentAlert }">
+    <!-- État nominal -->
+    <template v-if="!hasEquipmentAlert">
+      <div class="alert-bar-title">✓ Système</div>
+      <div v-for="h in healthItems" :key="h.id" class="alert-chip ok">
+        <span>{{ h.icon }}</span> {{ h.label }} OK
       </div>
-    </div>
+    </template>
+    <!-- Défaut détecté -->
+    <template v-else>
+      <div class="alert-bar-title">⚠ DÉFAUT</div>
+      <div v-for="h in healthItems.filter(h => h.problem)" :key="h.id" class="alert-item">
+        <span class="alert-item-icon">{{ h.icon }}</span>
+        <div class="alert-item-content">
+          <div class="alert-item-bus">Bus {{ h.label }} — erreur de communication</div>
+          <div class="alert-item-msg" :title="h.error">{{ h.error || 'Erreur I/O — vérifier le câblage et l\'alimentation' }}</div>
+        </div>
+      </div>
+    </template>
   </div>
 
   <div class="tab-bar">
@@ -276,6 +350,9 @@ footer { display: flex; align-items: center; gap: 0; padding: 4px 14px 5px;
     </button>
     <button class="tab-btn" :class="{ active: activeTab==='charts' }" @click="activeTab='charts'">
       📈 Graphiques
+    </button>
+    <button class="tab-btn" :class="{ active: activeTab==='maintenance' }" @click="activeTab='maintenance'">
+      🔧 Maintenance
     </button>
   </div>
 
@@ -338,6 +415,9 @@ footer { display: flex; align-items: center; gap: 0; padding: 4px 14px 5px;
         <div style="font-size:17px;font-weight:800;letter-spacing:-.02em;color:var(--text);margin-top:3px">
           {{ elecOn ? 'En marche' : 'Arrêté' }}
         </div>
+        <div style="font-size:8px;color:var(--text3);line-height:1.6;margin-top:2px;">
+          🔴 OFF &gt;750 mV · ON &lt;720 mV · 8h–22h
+        </div>
         <div class="elec-toggle" @click.stop="toggleElec">
           <span class="elec-toggle-label">{{ elecEnabled ? 'Activé' : 'Désactivé' }}</span>
           <div class="toggle-switch">
@@ -351,7 +431,7 @@ footer { display: flex; align-items: center; gap: 0; padding: 4px 14px 5px;
 
     <div class="col-control">
 
-      <div class="ctrl-card">
+      <div class="ctrl-card mode-card">
         <div class="section-title">Mode filtration</div>
         <div class="mode-grid">
           <button v-for="m in modes" :key="m.key"
@@ -373,24 +453,12 @@ footer { display: flex; align-items: center; gap: 0; padding: 4px 14px 5px;
         <input type="range" min="30" max="50" step="0.5"
           v-model="freqSlider" :style="{ '--pct': freqPct }"
           @input="onFreqInput" @change="sendFreq" @touchend="sendFreq">
-        <div class="freq-hint">Relâcher pour envoyer · bascule en mode forcé</div>
-      </div>
-
-      <div class="ctrl-card" style="padding:10px 13px">
-        <div class="section-title">Actions</div>
-        <div class="actions">
-          <div class="action-btn" :class="btnPrimeState.cls" @click="handleAction('prime')">
-            <span class="a-icon">💊</span>
-            <span class="a-label">{{ btnPrimeState.label }}</span>
-            <span class="a-sub">{{ btnPrimeState.sub }}</span>
-          </div>
-          <div class="action-btn" :class="btnCalState.cls" @click="handleAction('cal')">
-            <span class="a-icon">🔬</span>
-            <span class="a-label">{{ btnCalState.label }}</span>
-            <span class="a-sub">{{ btnCalState.sub }}</span>
-          </div>
+        <div class="freq-hint">
+          {{ sensors.filterMode === 'forced' ? 'Relâcher pour appliquer immédiatement' : 'Relâcher pour mémoriser · activer en mode Forcé' }}
         </div>
       </div>
+
+
 
     </div>
   </main>
@@ -419,6 +487,59 @@ footer { display: flex; align-items: center; gap: 0; padding: 4px 14px 5px;
       </div>
       <div class="chart-wrap"><canvas ref="chartOrp"></canvas></div>
       <div class="chart-footer">{{ historyLabel }}</div>
+    </div>
+  </div>
+
+  <!-- VUE MAINTENANCE -->
+  <div v-if="activeTab==='maintenance'"
+    style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;flex:1;padding:10px;overflow:hidden;">
+
+      <!-- Amorçage pompe -->
+      <div class="ctrl-card maint-card">
+        <div style="font-size:38px;">💊</div>
+        <div style="font-size:15px;font-weight:800;color:var(--text);">Amorçage pompe</div>
+        <div style="font-size:11px;color:var(--text3);line-height:1.4;font-family:var(--sans2);">
+          Démarre la pompe doseuse pH-<br>et injecte le volume configuré
+        </div>
+        <div class="action-btn" :class="btnPrimeState.cls" @click="handleAction('prime')"
+          style="width:100%;">
+          <span class="a-label">{{ btnPrimeState.label }}</span>
+          <span class="a-sub">{{ btnPrimeState.sub }}</span>
+        </div>
+      </div>
+
+      <!-- Étalonnage pH -->
+      <div class="ctrl-card maint-card">
+        <div style="font-size:38px;">🔬</div>
+        <div style="font-size:15px;font-weight:800;color:var(--text);">Étalonnage pH</div>
+        <div style="font-size:11px;color:var(--text3);line-height:1.4;font-family:var(--sans2);">
+          Calibration point milieu pH 7.0<br>Plonger la sonde dans la solution tampon
+        </div>
+        <div class="action-btn" :class="btnCalState.cls" @click="handleAction('cal')"
+          style="width:100%;">
+          <span class="a-label">{{ btnCalState.label }}</span>
+          <span class="a-sub">{{ btnCalState.sub }}</span>
+        </div>
+      </div>
+
+      <!-- Mode secours -->
+      <div class="ctrl-card maint-card"
+        :style="rescueActive ? 'border:2px solid var(--red);background:var(--red-lt)' : ''">
+        <div style="font-size:38px;">🚨</div>
+        <div style="font-size:15px;font-weight:800;"
+          :style="rescueActive ? 'color:var(--red)' : 'color:var(--text)'">
+          Mode secours
+        </div>
+        <div style="font-size:11px;color:var(--text3);line-height:1.4;font-family:var(--sans2);">
+          Pompe alimentée directement<br>via relais PCF — sans variateur
+        </div>
+        <div class="action-btn" :class="rescueBtnCls" @click="toggleRescue"
+          style="width:100%;">
+          <span class="a-label">{{ rescueActive ? 'Désactiver' : 'Activer' }}</span>
+          <span class="a-sub">{{ rescueBtnSub }}</span>
+        </div>
+      </div>
+
     </div>
   </div>
 
@@ -468,6 +589,10 @@ createApp({
       filterMode:'--', phAlarmLow:false, orpAlarm:false });
     const drive = reactive({ freq:'--', isRunning:false, isFault:false, faultCode:0, faultLabel:'' });
     const elecOn      = ref(false);
+    const rescueActive = ref(false);
+    const rescueBtnSub = ref('Confirmation requise');
+    const rescueBtnCls = ref('');
+    let rescueArmed = false; let rescueTimer = null;
     const elecEnabled = ref(true);  // consigne utilisateur
 
     const healthItems = reactive([
@@ -507,7 +632,17 @@ createApp({
     const freqPct     = computed(() => ((freqSlider.value-30)/20*100).toFixed(1)+'%');
     let freqDragging  = false;
     function onFreqInput() { freqDragging=true; freqDisplay.value=Number(freqSlider.value).toFixed(1); }
-    function sendFreq() { mqttClient.publish(`${MQTT_PREFIX}/cmd/freq`, Number(freqSlider.value).toFixed(1)); setTimeout(()=>{freqDragging=false;},500); }
+    function sendFreq() {
+      const val = Number(freqSlider.value).toFixed(1);
+      if (sensors.filterMode === 'forced') {
+        // Mode Forcé : envoie cmd/freq → applique immédiatement
+        mqttClient.publish(`${MQTT_PREFIX}/cmd/freq`, val);
+      } else {
+        // Autre mode : mémorise la consigne sans changer le mode
+        mqttClient.publish(`${MQTT_PREFIX}/cmd/freq_set`, val);
+      }
+      setTimeout(() => { freqDragging = false; }, 500);
+    }
 
     function makeBtn(label,sub) { return reactive({label,sub,cls:'',armed:false,timer:null,defaultLabel:label}); }
     const btnPrimeState = makeBtn('Amorçage',  'Pompe doseuse pH-');
@@ -569,21 +704,76 @@ createApp({
       charts.ph   = new Chart(chartPh.value,   { ...CHART_OPTS, data:{ labels:history.labels, datasets:[mkDs('#8b5cf6','rgba(139,92,246,.08)')] },
         options:{...CHART_OPTS.options, scales:{...CHART_OPTS.options.scales, y:{...CHART_OPTS.options.scales.y, min:6.5, max:7.8, ticks:{...CHART_OPTS.options.scales.y.ticks, callback:v=>v.toFixed(1)}}}} });
       charts.orp  = new Chart(chartOrp.value,  { ...CHART_OPTS, data:{ labels:history.labels, datasets:[mkDs('#0ea5e9','rgba(14,165,233,.08)')] },
-        options:{...CHART_OPTS.options, scales:{...CHART_OPTS.options.scales, y:{...CHART_OPTS.options.scales.y, min:400, max:900, ticks:{...CHART_OPTS.options.scales.y.ticks, callback:v=>v+' mV'}}}} });
+        options:{...CHART_OPTS.options, scales:{...CHART_OPTS.options.scales, y:{...CHART_OPTS.options.scales.y, min:400, max:900, ticks:{...CHART_OPTS.options.scales.y.ticks, callback:v=>v+' mV'}}},
+          plugins:{...CHART_OPTS.options.plugins, annotation:undefined}} });
+      // Ligne de seuil ORP 750 mV
+      charts.orp.data.datasets.push({
+        data: Array(60).fill(750),
+        borderColor: 'rgba(239,68,68,.5)',
+        borderDash: [4,3],
+        borderWidth: 1.5,
+        pointRadius: 0,
+        fill: false,
+        label: '750 mV',
+      });
+      charts.orp.data.datasets.push({
+        data: Array(60).fill(720),
+        borderColor: 'rgba(245,158,11,.4)',
+        borderDash: [4,3],
+        borderWidth: 1,
+        pointRadius: 0,
+        fill: false,
+        label: '720 mV',
+      });
     }
 
     function updateCharts() {
       if (!charts.temp) return;
-      ['temp','ph','orp'].forEach(k => {
+      ['temp','ph'].forEach(k => {
         charts[k].data.labels = [...history.labels];
         charts[k].data.datasets[0].data = [...history[k]];
         charts[k].update('none');
       });
+      // ORP : dataset[0] = données, dataset[1] = seuil 750, dataset[2] = seuil 720
+      charts.orp.data.labels = [...history.labels];
+      charts.orp.data.datasets[0].data = [...history.orp];
+      charts.orp.data.datasets[1].data = Array(history.labels.length || 1).fill(750);
+      charts.orp.data.datasets[2].data = Array(history.labels.length || 1).fill(720);
+      charts.orp.update('none');
     }
 
     watch(activeTab, async val => {
       if (val==='charts') { await nextTick(); if (!charts.temp) initCharts(); else updateCharts(); }
     });
+
+
+    function toggleRescue() {
+      if (rescueActive.value) {
+        // Désactivation directe
+        mqttClient.publish(`${MQTT_PREFIX}/cmd/mode`, 'auto');
+        rescueBtnCls.value = 'busy';
+        setTimeout(() => { rescueBtnCls.value = ''; }, 2000);
+        return;
+      }
+      // Activation : double confirmation
+      if (!rescueArmed) {
+        rescueArmed = true;
+        rescueBtnCls.value = 'confirm';
+        rescueBtnSub.value = 'Appuyer à nouveau pour confirmer';
+        rescueTimer = setTimeout(() => {
+          rescueArmed = false;
+          rescueBtnCls.value = '';
+          rescueBtnSub.value = 'Confirmation requise';
+        }, 5000);
+      } else {
+        clearTimeout(rescueTimer);
+        rescueArmed = false;
+        mqttClient.publish(`${MQTT_PREFIX}/cmd/rescue`, 'ON');
+        rescueBtnCls.value = 'busy';
+        rescueBtnSub.value = 'Mode secours activé';
+        setTimeout(() => { rescueBtnCls.value = ''; rescueBtnSub.value = 'Confirmation requise'; }, 2500);
+      }
+    }
 
     function sendMode(mode) { mqttClient.publish(`${MQTT_PREFIX}/cmd/mode`, mode); }
     function toggleElec() {
@@ -600,6 +790,7 @@ createApp({
       elecEnabled: `${MQTT_PREFIX}/electrolyzer/enabled`,
       health:      `${MQTT_PREFIX}/health`,
       status:      `${MQTT_PREFIX}/status`,
+      rescue:      `${MQTT_PREFIX}/rescue/state`,
     };
 
     function initMqtt() {
@@ -642,6 +833,7 @@ createApp({
               break;
             }
             case TOPICS.electrolyzer: elecOn.value = raw==='ON'; break;
+            case TOPICS.rescue: rescueActive.value = raw==='ON'; break;
             case TOPICS.elecEnabled: elecEnabled.value = raw==='ON'; break;
             case TOPICS.status:
               if (raw==='offline') connState.value='down';
@@ -671,6 +863,7 @@ createApp({
     return {
       connPill, clock, sleeping, activeTab,
       sensors, drive, elecOn, elecEnabled, toggleElec,
+      rescueActive, rescueBtnCls, rescueBtnSub, toggleRescue,
       orpZone, orpCardClass, orpBadgeCls,
       modes, getModeClass,
       freqSlider, freqDisplay, freqPct,
