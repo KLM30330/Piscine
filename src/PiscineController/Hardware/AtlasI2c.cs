@@ -12,6 +12,12 @@ public abstract class AtlasEzoBase : IDisposable
     private readonly string _deviceName;
     private bool _disposed;
 
+    // Délai minimum entre la fin d'une commande et le début de la suivante
+    // sur le bus I2C partagé. Les sondes EZO maintiennent SDA bas pendant
+    // le traitement — un délai inter-commande de 100 ms évite les collisions
+    // quand plusieurs sondes sont interrogées séquentiellement.
+    private const int InterCommandDelayMs = 100;
+
     protected AtlasEzoBase(int busId, int address, ILogger logger, EquipmentHealth health, string deviceName)
     {
         _logger = logger;
@@ -20,7 +26,12 @@ public abstract class AtlasEzoBase : IDisposable
         _device = I2cDevice.Create(new I2cConnectionSettings(busId, address));
     }
 
-    protected string? SendCommand(string command, int delayMs = 900)
+    // delayMs : temps d'attente entre l'envoi de la commande et la lecture
+    // de la réponse. Atlas Scientific recommande 900 ms pour une mesure ORP/pH
+    // et 1 500 ms dans les environnements bruités. On utilise 1 500 ms par
+    // défaut pour garantir que la sonde a fini de traiter avant la lecture,
+    // ce qui évite le code réponse 63 (sonde occupée) observé à 900 ms.
+    protected string? SendCommand(string command, int delayMs = 1500)
     {
         try
         {
@@ -33,9 +44,14 @@ public abstract class AtlasEzoBase : IDisposable
             Span<byte> rx = stackalloc byte[32];
             _device.Read(rx);
 
+            // Délai inter-commande : laisser le bus se stabiliser avant que
+            // la prochaine sonde prenne la main.
+            Thread.Sleep(InterCommandDelayMs);
+
             if (rx[0] != 1)
             {
-                _logger.LogWarning("Atlas EZO réponse code {Code} pour commande '{Cmd}'", rx[0], command);
+                _logger.LogWarning("Atlas EZO réponse code {Code} pour commande '{Cmd}' ({Device})",
+                    rx[0], command, _deviceName);
                 return null;
             }
             int len = rx[1..].IndexOf((byte)0);
@@ -65,7 +81,7 @@ public sealed class EzoPh : AtlasEzoBase
 
     public double? Read()
     {
-        var raw = SendCommand("R", 900);
+        var raw = SendCommand("R", 1500);
         return raw != null && double.TryParse(raw, System.Globalization.NumberStyles.Float,
             System.Globalization.CultureInfo.InvariantCulture, out double v) ? v : null;
     }
@@ -73,9 +89,9 @@ public sealed class EzoPh : AtlasEzoBase
     public void SetTemperatureCompensation(double tempC) =>
         SendCommand($"T,{tempC.ToString(System.Globalization.CultureInfo.InvariantCulture)}", 300);
 
-    public void CalibrateMid(double ph) => SendCommand($"Cal,mid,{ph.ToString(System.Globalization.CultureInfo.InvariantCulture)}", 1400);
-    public void CalibrateLow(double ph) => SendCommand($"Cal,low,{ph.ToString(System.Globalization.CultureInfo.InvariantCulture)}", 1400);
-    public void CalibrateHigh(double ph) => SendCommand($"Cal,high,{ph.ToString(System.Globalization.CultureInfo.InvariantCulture)}", 1400);
+    public void CalibrateMid(double ph) => SendCommand($"Cal,mid,{ph.ToString(System.Globalization.CultureInfo.InvariantCulture)}", 1600);
+    public void CalibrateLow(double ph) => SendCommand($"Cal,low,{ph.ToString(System.Globalization.CultureInfo.InvariantCulture)}", 1600);
+    public void CalibrateHigh(double ph) => SendCommand($"Cal,high,{ph.ToString(System.Globalization.CultureInfo.InvariantCulture)}", 1600);
 }
 
 public sealed class EzoOrp : AtlasEzoBase
@@ -85,7 +101,10 @@ public sealed class EzoOrp : AtlasEzoBase
 
     public double? Read()
     {
-        var raw = SendCommand("R", 900);
+        // 1 500 ms au lieu de 900 ms : l'EZO-ORP nécessite plus de temps
+        // que sa datasheet ne l'indique en environnement bruité (variateur WK600-D).
+        // Le code réponse 63 (sonde occupée) disparaît avec ce délai augmenté.
+        var raw = SendCommand("R", 1500);
         return raw != null && double.TryParse(raw, System.Globalization.NumberStyles.Float,
             System.Globalization.CultureInfo.InvariantCulture, out double v) ? v : null;
     }
@@ -98,7 +117,9 @@ public sealed class EzoRtd : AtlasEzoBase
 
     public double? Read()
     {
-        var raw = SendCommand("R", 600);
+        // RTD : temps de conversion plus court (600 ms suffisent),
+        // on augmente à 900 ms pour la même marge de sécurité.
+        var raw = SendCommand("R", 900);
         return raw != null && double.TryParse(raw, System.Globalization.NumberStyles.Float,
             System.Globalization.CultureInfo.InvariantCulture, out double v) ? v : null;
     }
@@ -109,9 +130,6 @@ public sealed class EzoPmp : AtlasEzoBase
     public EzoPmp(int busId, int address, ILogger<EzoPmp> logger, EquipmentHealth health)
         : base(busId, address, logger, health, "EZO-PMP") { }
 
-    // Durée estimée (ms) pour un dosage de volumeMl, y compris la marge de
-    // sécurité de la pompe péristaltique. Public pour permettre à l'appelant
-    // (ex. ButtonService) d'afficher un chrono sans dupliquer cette formule.
     public static int EstimateDoseMs(double volumeMl) =>
         (int)(volumeMl / 20.0 * 1000) + 2000;
 
