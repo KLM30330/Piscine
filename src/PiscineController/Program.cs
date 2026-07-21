@@ -100,6 +100,7 @@ var host = Host.CreateDefaultBuilder(args)
             sp.GetRequiredService<Wk600Drive>(),
             sp.GetRequiredService<PumpPrimingService>(),
             sp.GetRequiredService<FileLoggerProvider>(),
+            sp.GetRequiredService<IHostApplicationLifetime>(),
             sp.GetRequiredService<ILogger<MqttService>>()));
         services.AddHostedService(sp => sp.GetRequiredService<MqttService>());
 
