@@ -491,19 +491,22 @@ public sealed class MqttService : BackgroundService
                 retain: true, ct: ct);
         }
 
-        async Task Button(string id, string name, string commandSuffix, string payload = "ON")
+        async Task Button(string id, string name, string commandSuffix, string payloadPress = "ON")
         {
-            var disc = new
-            {
-                name,
-                unique_id     = $"{dev}_{id}",
-                command_topic = $"{dev}/cmd/{commandSuffix}",
-                payload_press = payload,
-                device,
-            };
+            // Type anonyme interdit en AOT — on construit le JSON manuellement.
+            // Le payload de découverte HA button est minimal : name, unique_id,
+            // command_topic, payload_press, device (inliné comme objet JSON).
+            string devJson = $"{{\"identifiers\":[\"{dev}\"],\"name\":\"Piscine\"}}";
+            string json = $"{{" +
+                $"\"name\":\"{name}\"," +
+                $"\"unique_id\":\"{dev}_{id}\"," +
+                $"\"command_topic\":\"{dev}/cmd/{commandSuffix}\"," +
+                $"\"payload_press\":\"{payloadPress}\"," +
+                $"\"device\":{devJson}" +
+                $"}}";
             await PublishAsync(
                 $"{_cfg.MqttHaDisc}/button/{dev}/{id}/config",
-                System.Text.Json.JsonSerializer.Serialize(disc),
+                json,
                 retain: true, ct: ct);
         }
 
