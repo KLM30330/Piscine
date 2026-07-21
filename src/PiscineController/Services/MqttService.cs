@@ -21,6 +21,7 @@ public sealed class MqttService : BackgroundService
     private readonly Wk600Drive _drive;
     private readonly PumpPrimingService _priming;
     private readonly FileLoggerProvider _fileLogger;
+    private readonly IHostApplicationLifetime _lifetime;
     private readonly ILogger<MqttService> _logger;
     private IMqttClient? _client;
 
@@ -34,12 +35,14 @@ public sealed class MqttService : BackgroundService
     public MqttService(PoolConfig cfg, PoolState state,
         FiltrationManager filtration, PhPidController pid,
         EzoPh ph, Wk600Drive drive, PumpPrimingService priming,
-        FileLoggerProvider fileLogger, ILogger<MqttService> logger)
+        FileLoggerProvider fileLogger,
+        IHostApplicationLifetime lifetime,
+        ILogger<MqttService> logger)
     {
         _cfg = cfg; _state = state;
         _filtration = filtration; _pid = pid;
         _ph = ph; _drive = drive; _priming = priming;
-        _fileLogger = fileLogger; _logger = logger;
+        _fileLogger = fileLogger; _lifetime = lifetime; _logger = logger;
         _priming.StateChanged += OnPrimingStateChanged;
         _state.FilterModeChanged += OnFilterModeChanged;
     }
@@ -211,6 +214,20 @@ public sealed class MqttService : BackgroundService
                     break;
                 case "logs":
                     if (payload != "0") await PublishLogsAsync(payload);
+                    break;
+
+                case "restart":
+                    // Arrêt propre du service — systemd le relance automatiquement
+                    // (Restart=always dans piscine.service). Délai de 2s pour laisser
+                    // le temps à la réponse MQTT d'être publiée avant l'arrêt.
+                    _logger.LogWarning("Redémarrage du service demandé depuis {Topic}", topic);
+                    await PublishAsync($"{_cfg.MqttPrefix}/status",
+                        "restarting", retain: true, ct: CancellationToken.None);
+                    _ = Task.Run(async () =>
+                    {
+                        await Task.Delay(2000);
+                        _lifetime.StopApplication();
+                    });
                     break;
 
                 // ── Paramètres configurables depuis HA ───────────────────────
@@ -473,6 +490,25 @@ public sealed class MqttService : BackgroundService
                 JsonSerializer.Serialize(p, AppJsonContext.Default.HaNumberDiscoveryPayload),
                 retain: true, ct: ct);
         }
+
+        async Task Button(string id, string name, string commandSuffix, string payload = "ON")
+        {
+            var disc = new
+            {
+                name,
+                unique_id     = $"{dev}_{id}",
+                command_topic = $"{dev}/cmd/{commandSuffix}",
+                payload_press = payload,
+                device,
+            };
+            await PublishAsync(
+                $"{_cfg.MqttHaDisc}/button/{dev}/{id}/config",
+                System.Text.Json.JsonSerializer.Serialize(disc),
+                retain: true, ct: ct);
+        }
+
+        // ── Bouton de redémarrage du service ─────────────────────────────────
+        await Button("restart_service", "Redémarrer le contrôleur", "restart", "ON");
 
         // ── Capteurs eau (topic: {prefix}/sensors) ────────────────────────────
         await Sensor("ph",         "pH Piscine",        "PhValue",    "pH",  null);
