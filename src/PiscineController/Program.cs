@@ -2,6 +2,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using System.Reflection;
 using PiscineController;
 using PiscineController.Config;
 using PiscineController.Filtration;
@@ -155,9 +156,9 @@ var host = Host.CreateDefaultBuilder(args)
 // par le workflow GitHub Actions publish.yml via /p:InformationalVersion=x.x.x.x.
 // Elle apparaît dans les logs dès le démarrage pour faciliter le diagnostic.
 var startLogger = host.Services.GetRequiredService<ILogger<Program>>();
-var version = System.Reflection.Assembly
+var version = Assembly
     .GetExecutingAssembly()
-    .GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>()
+    .GetCustomAttribute<AssemblyInformationalVersionAttribute>()
     ?.InformationalVersion ?? "inconnue";
 startLogger.LogInformation(
     "╔══════════════════════════════════════════════════╗");
