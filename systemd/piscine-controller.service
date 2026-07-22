@@ -1,19 +1,24 @@
 [Unit]
 Description=Piscine Controller (.NET 10 AOT)
-After=network.target
+# network-online.target garantit que la carte réseau est configurée et
+# que le routage est opérationnel avant le démarrage du service.
+# Sans cela, la connexion MQTT échoue avec "Network is unreachable"
+# pendant plusieurs secondes au boot (observé dans les logs).
+After=network-online.target mosquitto.service
+Wants=network-online.target
 
 [Service]
 Type=simple
-User=pi
-WorkingDirectory=/opt/piscine
-ExecStart=/opt/piscine/PiscineController
-Restart=on-failure
+User=klm
+WorkingDirectory=/home/klm/pool
+ExecStart=/home/klm/pool/PiscineController
+Restart=always
 RestartSec=5s
 KillSignal=SIGTERM
 TimeoutStopSec=15s
 StandardOutput=journal
 StandardError=journal
-SyslogIdentifier=piscine-controller
+SyslogIdentifier=PiscineController
 
 [Install]
 WantedBy=multi-user.target
