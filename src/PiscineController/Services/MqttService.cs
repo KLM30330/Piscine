@@ -18,6 +18,7 @@ public sealed class MqttService : BackgroundService
     private readonly FiltrationManager _filtration;
     private readonly PhPidController _pid;
     private readonly EzoPh _ph;
+    private readonly EzoOrp _orp;
     private readonly Wk600Drive _drive;
     private readonly PumpPrimingService _priming;
     private readonly FileLoggerProvider _fileLogger;
@@ -34,14 +35,14 @@ public sealed class MqttService : BackgroundService
 
     public MqttService(PoolConfig cfg, PoolState state,
         FiltrationManager filtration, PhPidController pid,
-        EzoPh ph, Wk600Drive drive, PumpPrimingService priming,
+        EzoPh ph, EzoOrp orp, Wk600Drive drive, PumpPrimingService priming,
         FileLoggerProvider fileLogger,
         IHostApplicationLifetime lifetime,
         ILogger<MqttService> logger)
     {
         _cfg = cfg; _state = state;
         _filtration = filtration; _pid = pid;
-        _ph = ph; _drive = drive; _priming = priming;
+        _ph = ph; _orp = orp; _drive = drive; _priming = priming;
         _fileLogger = fileLogger; _lifetime = lifetime; _logger = logger;
         _priming.StateChanged += OnPrimingStateChanged;
         _state.FilterModeChanged += OnFilterModeChanged;
@@ -202,6 +203,17 @@ public sealed class MqttService : BackgroundService
                         await PublishAsync($"{_cfg.MqttPrefix}/action/calibrating", "ON");
                         _ph.CalibrateMid(_cfg.PhCalMidValue);
                         await PublishAsync($"{_cfg.MqttPrefix}/action/calibrating", "OFF");
+                    }
+                    break;
+
+                case "calibrate_orp":
+                    if (payload == "ON")
+                    {
+                        _logger.LogInformation("Calibration ORP déclenchée (solution 225 mV)");
+                        await PublishAsync($"{_cfg.MqttPrefix}/action/calibrating_orp", "ON");
+                        _orp.Calibrate(225.0);
+                        await PublishAsync($"{_cfg.MqttPrefix}/action/calibrating_orp", "OFF");
+                        _logger.LogInformation("Calibration ORP terminée");
                     }
                     break;
                 case "reset_fault":
