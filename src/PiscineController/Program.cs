@@ -150,4 +150,23 @@ var host = Host.CreateDefaultBuilder(args)
     })
     .Build();
 
+// ── Log de version au démarrage ───────────────────────────────────────────────
+// La version est lue depuis l'attribut AssemblyInformationalVersion injecté
+// par le workflow GitHub Actions publish.yml via /p:InformationalVersion=x.x.x.x.
+// Elle apparaît dans les logs dès le démarrage pour faciliter le diagnostic.
+var startLogger = host.Services.GetRequiredService<ILogger<Program>>();
+var version = System.Reflection.Assembly
+    .GetExecutingAssembly()
+    .GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>()
+    ?.InformationalVersion ?? "inconnue";
+startLogger.LogInformation(
+    "╔══════════════════════════════════════════════════╗");
+startLogger.LogInformation(
+    "║  PiscineController v{Version}", version);
+startLogger.LogInformation(
+    "║  Démarrage : {Now:yyyy-MM-dd HH:mm:ss}",
+    DateTime.Now);
+startLogger.LogInformation(
+    "╚══════════════════════════════════════════════════╝");
+
 await host.RunAsync();
