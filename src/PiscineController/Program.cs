@@ -98,6 +98,7 @@ var host = Host.CreateDefaultBuilder(args)
             sp.GetRequiredService<FiltrationManager>(),
             sp.GetRequiredService<PhPidController>(),
             sp.GetRequiredService<EzoPh>(),
+            sp.GetRequiredService<EzoOrp>(),
             sp.GetRequiredService<Wk600Drive>(),
             sp.GetRequiredService<PumpPrimingService>(),
             sp.GetRequiredService<FileLoggerProvider>(),
