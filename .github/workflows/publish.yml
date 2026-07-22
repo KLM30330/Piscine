@@ -27,6 +27,8 @@ jobs:
           dotnet publish src/PiscineController/ \
             -c Release -r linux-arm64 --self-contained \
             /p:PublishAot=true \
+            /p:AssemblyVersion=${{ github.ref_name }} \
+            /p:InformationalVersion=${{ github.ref_name }} \
             -o publish/
       - name: Créer GitHub Release
         uses: softprops/action-gh-release@v3
