@@ -289,6 +289,74 @@ footer { display: flex; align-items: center; gap: 0; padding: 4px 14px 5px;
   height: auto;
   min-height: 48px;
 }
+
+/* ── Mode calibration pH ── */
+.cal-overlay {
+  position: fixed; inset: 0; z-index: 1000;
+  background: rgba(139,92,246,.96);
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 20px; padding: 30px;
+}
+.cal-title {
+  font-size: 28px; font-weight: 800;
+  color: white; text-align: center;
+  letter-spacing: -.02em;
+}
+.cal-steps {
+  background: rgba(255,255,255,.15);
+  border-radius: 16px; padding: 20px 28px;
+  display: flex; flex-direction: column; gap: 12px;
+  width: 100%; max-width: 600px;
+}
+.cal-step {
+  display: flex; align-items: flex-start; gap: 12px;
+  font-size: 15px; color: white; font-weight: 600;
+}
+.cal-step-num {
+  width: 28px; height: 28px; border-radius: 50%;
+  background: white; color: #8b5cf6;
+  font-weight: 800; font-size: 14px;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.cal-step.done .cal-step-num { background: #10b981; color: white; }
+.cal-step.done .cal-step-text { opacity: .6; text-decoration: line-through; }
+.cal-step-text { padding-top: 4px; }
+.cal-timer {
+  font-size: 52px; font-weight: 800;
+  color: white; font-variant-numeric: tabular-nums;
+  text-align: center; letter-spacing: .05em;
+}
+.cal-timer-label {
+  font-size: 13px; color: rgba(255,255,255,.7);
+  text-align: center; margin-top: -14px;
+}
+.cal-status {
+  font-size: 16px; color: rgba(255,255,255,.9);
+  text-align: center; font-style: italic;
+}
+.cal-btn-row { display: flex; gap: 12px; }
+.cal-btn {
+  padding: 14px 28px; border-radius: 12px;
+  font-size: 15px; font-weight: 800; cursor: pointer;
+  border: 2px solid white; transition: all .2s;
+}
+.cal-btn.primary { background: white; color: #8b5cf6; }
+.cal-btn.primary:disabled { opacity: .5; cursor: not-allowed; }
+.cal-btn.secondary { background: transparent; color: white; }
+.cal-btn.success { background: #10b981; border-color: #10b981; color: white; }
+
+
+/* ── Mode calibration ORP ── */
+.cal-overlay-orp {
+  position: fixed; inset: 0; z-index: 1001;
+  background: rgba(14,165,233,.96);
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 20px; padding: 30px;
+}
+
 /* ── Veille ── */
 .sleep-overlay { position: fixed; inset: 0; z-index: 9999; background: #000;
   display: flex; align-items: center; justify-content: center; cursor: pointer; }
@@ -508,6 +576,19 @@ footer { display: flex; align-items: center; gap: 0; padding: 4px 14px 5px;
         </div>
       </div>
 
+      <!-- Calibration ORP -->
+      <div class="ctrl-card maint-card" style="--card-accent:#0ea5e9">
+        <div style="font-size:40px;">⚡</div>
+        <div style="font-size:15px;font-weight:800;color:var(--text);">Calibration ORP</div>
+        <div style="font-size:11px;color:var(--text3);font-family:var(--sans2);text-align:center;">
+          Solution étalon 225 mV<br>rincer la sonde avant
+        </div>
+        <div class="action-btn" @click="startCalOrp" style="width:100%;">
+          <span class="a-label">Calibration Redox</span>
+          <span class="a-sub">solution 225 mV</span>
+        </div>
+      </div>
+
       <!-- Étalonnage pH -->
       <div class="ctrl-card maint-card">
         <div style="font-size:38px;">🔬</div>
@@ -515,7 +596,7 @@ footer { display: flex; align-items: center; gap: 0; padding: 4px 14px 5px;
         <div style="font-size:11px;color:var(--text3);line-height:1.4;font-family:var(--sans2);">
           Calibration point milieu pH 7.0<br>Plonger la sonde dans la solution tampon
         </div>
-        <div class="action-btn" :class="btnCalState.cls" @click="handleAction('cal')"
+        <div class="action-btn" @click="startCal"
           style="width:100%;">
           <span class="a-label">{{ btnCalState.label }}</span>
           <span class="a-sub">{{ btnCalState.sub }}</span>
@@ -775,6 +856,94 @@ createApp({
       }
     }
 
+
+    // ── Mode calibration pH ───────────────────────────────────────────────────
+    const calMode  = ref('idle');  // idle | stabilizing | ready | sent | done
+    const calStep  = ref(1);
+    const calTimer = ref(180);     // 3 minutes de stabilisation
+    let calInterval = null;
+
+    function startCal() {
+      calMode.value  = 'stabilizing';
+      calStep.value  = 2;
+      calTimer.value = 180;
+      calInterval = setInterval(() => {
+        calTimer.value--;
+        if (calTimer.value <= 0) {
+          clearInterval(calInterval);
+          calMode.value = 'ready';
+          calStep.value = 4;
+        }
+      }, 1000);
+    }
+
+    function confirmCal() {
+      if (calMode.value === 'done') { cancelCal(); return; }
+      if (calMode.value !== 'ready') return;
+      calMode.value = 'sent';
+      calStep.value = 4;
+      mqttClient.publish(`${MQTT_PREFIX}/cmd/calibrate_mid`, 'ON');
+      setTimeout(() => {
+        calMode.value = 'done';
+      }, 2000);
+    }
+
+    function cancelCal() {
+      clearInterval(calInterval);
+      calMode.value  = 'idle';
+      calStep.value  = 1;
+      calTimer.value = 180;
+    }
+
+    const calTimerDisplay = computed(() => {
+      const m = Math.floor(calTimer.value / 60);
+      const s = calTimer.value % 60;
+      return m > 0 ? `${m}:${s.toString().padStart(2,'0')}` : calTimer.value.toString();
+    });
+
+
+
+    // ── Mode calibration ORP ─────────────────────────────────────────────────
+    const calOrpMode  = ref('idle');
+    const calOrpStep  = ref(1);
+    const calOrpTimer = ref(120);   // 2 minutes
+    let calOrpInterval = null;
+
+    function startCalOrp() {
+      calOrpMode.value  = 'stabilizing';
+      calOrpStep.value  = 2;
+      calOrpTimer.value = 120;
+      calOrpInterval = setInterval(() => {
+        calOrpTimer.value--;
+        if (calOrpTimer.value <= 0) {
+          clearInterval(calOrpInterval);
+          calOrpMode.value = 'ready';
+          calOrpStep.value = 4;
+        }
+      }, 1000);
+    }
+
+    function confirmCalOrp() {
+      if (calOrpMode.value === 'done') { cancelCalOrp(); return; }
+      if (calOrpMode.value !== 'ready') return;
+      calOrpMode.value = 'sent';
+      mqttClient.publish(`${MQTT_PREFIX}/cmd/calibrate_orp`, 'ON');
+      setTimeout(() => { calOrpMode.value = 'done'; }, 2000);
+    }
+
+    function cancelCalOrp() {
+      clearInterval(calOrpInterval);
+      calOrpMode.value  = 'idle';
+      calOrpStep.value  = 1;
+      calOrpTimer.value = 120;
+    }
+
+    const calOrpTimerDisplay = computed(() => {
+      const m = Math.floor(calOrpTimer.value / 60);
+      const s = calOrpTimer.value % 60;
+      return m > 0 ? `${m}:${s.toString().padStart(2,'0')}` : calOrpTimer.value.toString();
+    });
+
     function sendMode(mode) { mqttClient.publish(`${MQTT_PREFIX}/cmd/mode`, mode); }
     function toggleElec() {
       const newVal = !elecEnabled.value;
@@ -871,6 +1040,8 @@ createApp({
       healthItems, healthDetail, hasEquipmentAlert,
       chartTemp, chartPh, chartOrp, historyLabel,
       sendMode, sendFreq, onFreqInput, handleAction,
+      calMode, calStep, calTimer, calTimerDisplay, startCal, confirmCal, cancelCal,
+      calOrpMode, calOrpStep, calOrpTimer, calOrpTimerDisplay, startCalOrp, confirmCalOrp, cancelCalOrp,
     };
   }
 }).mount('#app');
