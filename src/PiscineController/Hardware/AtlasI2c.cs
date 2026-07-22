@@ -108,6 +108,14 @@ public sealed class EzoOrp : AtlasEzoBase
         return raw != null && double.TryParse(raw, System.Globalization.NumberStyles.Float,
             System.Globalization.CultureInfo.InvariantCulture, out double v) ? v : null;
     }
+
+    // Calibration avec solution étalon ORP (typiquement 225 mV).
+    // Commande Atlas EZO-ORP : Cal,225 — la sonde prend la lecture actuelle
+    // comme référence et la stocke dans sa mémoire interne (EEPROM).
+    public void Calibrate(double mv = 225.0) =>
+        SendCommand($"Cal,{mv.ToString(System.Globalization.CultureInfo.InvariantCulture)}", 1600);
+
+    public void ClearCalibration() => SendCommand("Cal,clear", 300);
 }
 
 public sealed class EzoRtd : AtlasEzoBase
