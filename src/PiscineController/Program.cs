@@ -24,7 +24,14 @@ var preConfig = new ConfigurationBuilder()
 string logDirectory   = preConfig["Pool:LogDirectory"]   ?? "/opt/piscine/logs";
 int    logRetentionDays = int.TryParse(preConfig["Pool:LogRetentionDays"], out int rd) ? rd : 7;
 
-var fileLoggerProvider = new FileLoggerProvider(logDirectory, LogLevel.Information, logRetentionDays);
+// Niveau de log configurable dans appsettings.json (Pool:LogLevel).
+// Valeurs : Trace, Debug, Information, Warning, Error, Critical
+// Par défaut : Information. Passer à Debug pour voir tous les messages.
+var logLevelStr = preConfig["Pool:LogLevel"] ?? "Information";
+var logLevel    = Enum.TryParse<LogLevel>(logLevelStr, ignoreCase: true, out var ll)
+                  ? ll : LogLevel.Information;
+
+var fileLoggerProvider = new FileLoggerProvider(logDirectory, logLevel, logRetentionDays);
 
 var host = Host.CreateDefaultBuilder(args)
     .ConfigureLogging(logging =>
@@ -32,7 +39,7 @@ var host = Host.CreateDefaultBuilder(args)
         logging.ClearProviders();
         logging.AddConsole();
         logging.AddProvider(fileLoggerProvider);
-        logging.SetMinimumLevel(LogLevel.Information);
+        logging.SetMinimumLevel(logLevel);
     })
     .ConfigureServices((ctx, services) =>
     {
