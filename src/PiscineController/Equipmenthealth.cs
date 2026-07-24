@@ -50,6 +50,11 @@ public sealed class EquipmentHealth
     }
 
     // device = nom de l'équipement (ex. "EZO-pH", "DS18B20", "WK600-D").
+    // Déclenché dès qu'un bus bascule OK→panne ou panne→OK.
+    // HealthService s'y abonne pour publier immédiatement sur MQTT
+    // sans attendre le prochain cycle de 30s.
+    public event Action? BusStatusChanged;
+
     public void ReportFailure(EquipmentBus bus, string device, Exception ex)
     {
         bool becomesBad;
@@ -66,14 +71,15 @@ public sealed class EquipmentHealth
             if (becomesBad) s.Ok = false;
         }
 
-        // Log intermédiaire (debug) sur les défauts qui n'atteignent pas encore
-        // le seuil — visible en mode Debug sans polluer le niveau Info/Warning.
         if (count < _failureThreshold)
             _logger.LogDebug("Équipement {Bus}/{Device}: défaut transitoire ({N}/{Threshold})",
                 bus, device, count, _failureThreshold);
         else if (becomesBad)
+        {
             _logger.LogError(ex, "Équipement {Bus}/{Device}: {N} défauts consécutifs — bus déclaré en panne",
                 bus, device, count);
+            BusStatusChanged?.Invoke();  // notification immédiate HealthService
+        }
     }
 
     public void ReportSuccess(EquipmentBus bus, string device)
@@ -88,7 +94,10 @@ public sealed class EquipmentHealth
                 s.ConsecutiveFailures = 0;
         }
         if (!wasOk)
+        {
             _logger.LogInformation("Équipement {Bus}/{Device}: communication rétablie", bus, device);
+            BusStatusChanged?.Invoke();  // notification immédiate HealthService
+        }
     }
 
     public bool IsOk(EquipmentBus bus) { lock (_lock) return _state[bus].Ok; }
